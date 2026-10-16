@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f2c47">
+  <title>StudySense — Learning Diagnostic</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="plant" viewBox="0 0 170 230">
+        <defs><linearGradient id="lf1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7ddba8"/><stop offset="1" stop-color="#2a9468"/></linearGradient><linearGradient id="lf2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4cc08a"/><stop offset="1" stop-color="#1c7a54"/></linearGradient></defs>
+        <g fill="none" stroke="#2a8a5e" stroke-width="3.5" stroke-linecap="round"><path d="M30 230C34 170 44 120 74 52"/><path d="M52 230C62 180 92 132 134 84"/><path d="M14 230C10 184 16 140 30 100"/><path d="M70 230C80 190 110 150 150 120"/></g>
+        <path d="M74 52c-20-6-27-28-19-48 22 6 28 28 19 48z" fill="url(#lf1)"/><path d="M60 94c-24 2-41-13-43-34 24-2 43 13 43 34z" fill="url(#lf2)"/><path d="M92 100c19-13 41-9 54 9-19 13-41 9-54-9z" fill="url(#lf1)"/>
+        <path d="M134 84c4-22 21-33 41-28-2 22-19 33-41 28z" fill="url(#lf2)"/><path d="M34 130c-19 2-32-11-34-28 19-2 34 9 34 28z" fill="url(#lf1)"/><path d="M46 152c17-11 37-7 48 9-17 11-37 7-48-9z" fill="url(#lf2)"/>
+        <path d="M150 120c10-16 28-20 40-10-8 16-26 20-40 10z" fill="url(#lf1)"/><path d="M74 52c-8-10-9-24-4-38" stroke="#fff" stroke-width="2" fill="none" opacity=".5"/>
+      </symbol>
+      <symbol id="chip" viewBox="0 0 120 100">
+        <defs><linearGradient id="chipb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3f86e0"/><stop offset="1" stop-color="#173f86"/></linearGradient><linearGradient id="chipt" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7cb8ff"/><stop offset="1" stop-color="#2a6fc9"/></linearGradient><linearGradient id="pin" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd27a"/><stop offset="1" stop-color="#ee9a1c"/></linearGradient></defs>
+        <g fill="url(#pin)"><rect x="22" y="2" width="6" height="15" rx="3"/><rect x="38" y="2" width="6" height="15" rx="3"/><rect x="54" y="2" width="6" height="15" rx="3"/><rect x="70" y="2" width="6" height="15" rx="3"/><rect x="86" y="2" width="6" height="15" rx="3"/><rect x="22" y="83" width="6" height="15" rx="3"/><rect x="38" y="83" width="6" height="15" rx="3"/><rect x="54" y="83" width="6" height="15" rx="3"/><rect x="70" y="83" width="6" height="15" rx="3"/><rect x="86" y="83" width="6" height="15" rx="3"/></g>
+        <rect x="12" y="12" width="96" height="76" rx="14" fill="url(#chipb)"/><rect x="12" y="12" width="96" height="30" rx="14" fill="#fff" opacity=".18"/><rect x="24" y="23" width="72" height="54" rx="9" fill="url(#chipt)"/>
+        <path d="M34 39h30M34 51h44M34 63h22" stroke="#d6eaff" stroke-width="4.5" stroke-linecap="round"/><circle cx="84" cy="39" r="6" fill="url(#pin)"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5C4 5.5 7 4 12 6c5-2 8-.5 8-.5V18s-3-1.5-8 .5c-5-2-8-.5-8-.5z"/><path d="M12 6v12.5"/></svg></div>
+        <strong>StudySense</strong>
+      </div>
+      <nav class="nav-list" aria-label="Main navigation">
+        <button class="nav-item active" data-page="dashboard"><svg class="ico" viewBox="0 0 24 24"><path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></svg>Home</button>
+        <button class="nav-item" data-page="assessment"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.8 2.8L16 9.5"/></svg>Take Assessment</button>
+        <button class="nav-item" data-page="subjects"><svg class="ico" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>My Subjects</button>
+        <button class="nav-item" data-page="revision"><svg class="ico" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h4"/></svg>Revision Plan</button>
+        <button class="nav-item" data-page="progress"><svg class="ico" viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Progress</button>
+        <button class="nav-item" data-page="settings"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>Settings</button>
+      </nav>
+      <div class="sidebar-note"><p>Small steps every day make big progress.</p><span class="note-rule" aria-hidden="true"></span></div>
+    </aside>
+    <div class="scrim" id="scrim"></div>
+
+    <main class="main-content">
+      <span class="gem gem-blue" aria-hidden="true"></span><span class="gem gem-orange" aria-hidden="true"></span><span class="gem gem-cube" aria-hidden="true"></span>
+      <svg class="corner-plant plant-left" aria-hidden="true"><use href="#plant"/></svg>
+      <svg class="corner-plant plant-right" aria-hidden="true"><use href="#plant"/></svg>
+
+      <header class="topbar">
+        <button class="mobile-menu" id="mobileMenu" aria-label="Open menu">☰</button>
+        <div class="crumb" id="pageCrumb">Home</div>
+        <div class="top-actions">
+          <div class="search-wrap" id="searchWrap">
+            <button class="icon-btn" id="searchToggle" aria-label="Search" aria-expanded="false" aria-controls="searchPanel"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg></button>
+            <div class="popover search-panel hidden" id="searchPanel" role="search">
+              <input id="searchInput" type="search" placeholder="Search subjects, topics, questions…" autocomplete="off" aria-label="Search StudySense">
+              <div class="search-results" id="searchResults" aria-live="polite"></div>
+            </div>
+          </div>
+          <button class="icon-btn has-dot" data-toast="No new notifications." aria-label="Notifications"><svg class="ico" viewBox="0 0 24 24"><path d="M6 17V11a6 6 0 1 1 12 0v6l1.5 2h-15z"/><path d="M10 21h4"/></svg><i class="dot" aria-hidden="true"></i></button>
+          <div class="account-wrap" id="accountWrap">
+            <button class="avatar" id="avatar" aria-label="Account menu" aria-expanded="false" aria-controls="accountMenu">P</button>
+            <div class="popover account-menu hidden" id="accountMenu"></div>
+          </div>
+        </div>
+      </header>
+
+      <!-- HOME -->
+      <section class="page active" id="page-dashboard">
+        <div class="hero">
+          <div class="hero-text">
+            <h1 id="greeting">Good Morning 👋</h1>
+            <p class="subheading">Know what you understand. Find what needs work. Improve with purpose.</p>
+          </div>
+          <div class="hero-art" data-tilt="soft" aria-hidden="true">
+            <svg viewBox="0 0 420 230" class="hero-svg">
+              <defs>
+                <linearGradient id="skin" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd7b5"/><stop offset="1" stop-color="#eea67a"/></linearGradient>
+                <linearGradient id="hood" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#52c79b"/><stop offset="1" stop-color="#1f7a5a"/></linearGradient>
+                <linearGradient id="lap" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f4f8fb"/><stop offset="1" stop-color="#b4c3d2"/></linearGradient>
+                <linearGradient id="desk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0c48c"/><stop offset="1" stop-color="#c98d4e"/></linearGradient>
+                <linearGradient id="bk1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3d7fd6"/><stop offset="1" stop-color="#1b4a93"/></linearGradient>
+                <linearGradient id="bk2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffc25a"/><stop offset="1" stop-color="#ee8f17"/></linearGradient>
+                <linearGradient id="bk3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff7a73"/><stop offset="1" stop-color="#d93a3f"/></linearGradient>
+                <linearGradient id="bk4" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#43d1bd"/><stop offset="1" stop-color="#139b8d"/></linearGradient>
+                <radialGradient id="glow"><stop offset="0" stop-color="#fff" stop-opacity=".9"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+              </defs>
+              <ellipse cx="215" cy="130" rx="190" ry="100" fill="url(#glow)"/>
+              <ellipse cx="215" cy="216" rx="195" ry="9" fill="rgba(15,44,71,.16)"/>
+              <rect x="8" y="198" width="404" height="14" rx="7" fill="url(#desk)"/><rect x="8" y="198" width="404" height="4" rx="2" fill="#fff" opacity=".4"/>
+              <rect x="26" y="168" width="92" height="30" rx="5" fill="url(#bk1)"/><rect x="32" y="152" width="82" height="16" rx="5" fill="url(#bk2)"/><rect x="22" y="136" width="90" height="16" rx="5" fill="url(#bk3)"/><rect x="30" y="120" width="76" height="16" rx="5" fill="url(#bk4)"/>
+              <rect x="26" y="168" width="92" height="6" rx="3" fill="#fff" opacity=".25"/>
+              <rect x="126" y="148" width="28" height="50" rx="6" fill="url(#bk3)"/><rect x="126" y="148" width="28" height="10" rx="5" fill="#b92f34"/><path d="M152 160c10 0 10 20 0 20" stroke="#d93a3f" stroke-width="4" fill="none"/><rect x="131" y="152" width="5" height="40" rx="2.5" fill="#fff" opacity=".3"/>
+              <path d="M146 198Q148 138 214 136Q280 138 282 198Z" fill="url(#hood)"/><path d="M180 150q34 28 68 0" stroke="#1b6a4e" stroke-width="4" fill="none" opacity=".6"/>
+              <ellipse cx="214" cy="140" rx="38" ry="12" fill="#1f7a5a"/><path d="M200 146v22M228 146v22" stroke="#e8fff5" stroke-width="3" stroke-linecap="round"/>
+              <circle cx="214" cy="98" r="37" fill="url(#skin)"/><circle cx="177" cy="102" r="7.5" fill="#eaa377"/><circle cx="251" cy="102" r="7.5" fill="#eaa377"/>
+              <path d="M176 100Q170 52 214 50Q258 52 252 100Q241 76 214 76Q189 76 176 100Z" fill="#33211b"/><path d="M190 62q22-10 46 0" stroke="#5a3a2e" stroke-width="4" fill="none" stroke-linecap="round" opacity=".6"/>
+              <circle cx="201" cy="106" r="3.6" fill="#2b1b16"/><circle cx="227" cy="106" r="3.6" fill="#2b1b16"/><circle cx="202.2" cy="104.8" r="1.2" fill="#fff"/><circle cx="228.2" cy="104.8" r="1.2" fill="#fff"/>
+              <path d="M194 97q7-4 13 0M221 97q7-4 13 0" stroke="#33211b" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+              <circle cx="192" cy="117" r="6" fill="#ff9f8f" opacity=".4"/><circle cx="236" cy="117" r="6" fill="#ff9f8f" opacity=".4"/><path d="M205 119q9 8 18 0" stroke="#a5583a" stroke-width="2.8" fill="none" stroke-linecap="round"/>
+              <rect x="170" y="152" width="88" height="48" rx="6" fill="url(#lap)"/><rect x="170" y="152" width="88" height="8" rx="4" fill="#fff" opacity=".6"/><circle cx="214" cy="178" r="6.5" fill="#9fb2c4"/>
+              <circle cx="184" cy="152" r="8" fill="url(#skin)"/><circle cx="244" cy="152" r="8" fill="url(#skin)"/>
+              <path d="M334 198c0-36 6-58 6-76" stroke="#2a6fd0" stroke-width="5.5" fill="none" stroke-linecap="round"/><path d="M340 122l-36-12 17-26 30 17z" fill="#4a9bf5"/><path d="M340 122l-36-12 7-11 30 6z" fill="#8cc6ff" opacity=".7"/><ellipse cx="334" cy="198" rx="17" ry="5" fill="#1d4f91"/>
+              <rect x="370" y="168" width="28" height="30" rx="8" fill="url(#bk4)"/><path d="M398 176c11 0 11 15 0 15" stroke="#139b8d" stroke-width="3.5" fill="none"/><rect x="374" y="172" width="5" height="22" rx="2.5" fill="#fff" opacity=".35"/>
+              <path d="M378 162c0-6 5-6 5-12M389 162c0-6 5-6 5-12" stroke="#a9bccd" stroke-width="2" fill="none" stroke-linecap="round"/>
+            </svg>
+            <div class="sticky">Better than yesterday ☺</div>
+            <i class="float-gem g1"></i><i class="float-gem g2"></i>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <article class="stat-card" data-tilt>
+            <span class="stat-icon tile-blue"><svg class="ico" viewBox="0 0 24 24"><path d="M4 5.5C4 5.5 7 4 12 6c5-2 8-.5 8-.5V18s-3-1.5-8 .5c-5-2-8-.5-8-.5z"/><path d="M12 6v12.5"/></svg></span>
+            <div class="stat-label">Total Subjects</div>
+            <div class="stat-number" id="statSubjects">0</div>
+            <button class="stat-link" data-go="subjects">View all →</button>
+          </article>
+          <article class="stat-card" data-tilt>
+            <span class="stat-icon tile-teal"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/><path d="M12 12 19 5"/></svg></span>
+            <div class="stat-label">Topics Mastered</div>
+            <div class="stat-number"><span id="statTopics">0</span><small id="statTopicsTotal"> / 0</small></div>
+            <div class="bar" aria-hidden="true"><span id="statTopicsBar" style="width:0"></span></div>
+          </article>
+          <article class="stat-card" data-tilt>
+            <span class="stat-icon tile-orange"><svg class="ico" viewBox="0 0 24 24"><path d="M12 4 3 20h18z"/><path d="M12 10v4M12 17v.5"/></svg></span>
+            <div class="stat-label">Weak Topics</div>
+            <div class="stat-number" id="statReview">0</div>
+            <button class="stat-link" data-go="revision">View details →</button>
+          </article>
+          <article class="stat-card" data-tilt>
+            <span class="stat-icon tile-teal"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg></span>
+            <div class="stat-label">Overall Accuracy</div>
+            <div class="accuracy-row">
+              <div><div class="stat-number" id="statAccuracy">—</div><div class="stat-change" id="statChange"></div></div>
+              <div id="accuracyDonut" class="donut-wrap"></div>
+            </div>
+          </article>
+        </div>
+
+        <div class="section-heading"><h2>Your Subjects</h2><button class="text-btn" data-go="subjects">View all →</button></div>
+        <div id="dashboardSubjects" class="subject-grid"></div>
+        <div id="recommendationCard"></div>
+      </section>
+
+      <!-- SUBJECTS -->
+      <section class="page" id="page-subjects">
+        <div class="page-bar"><button class="back-btn" data-go="dashboard" aria-label="Back to Home">←</button><h1>My Subjects</h1></div>
+        <p class="subheading page-sub">A topic is judged on all its questions, never a single slip.</p>
+        <div id="allSubjects" class="subject-cards"></div>
+      </section>
+
+      <!-- ASSESSMENT -->
+      <section class="page" id="page-assessment">
+        <div id="assessmentIntro" class="page-bar"><button class="back-btn" data-go="dashboard" aria-label="Back to Home">←</button><h1>Take Assessment</h1></div>
+        <div class="assessment-layout">
+          <section class="panel assessment-panel" id="assessmentSetup" data-tilt="soft">
+            <div class="panel-title"><h2>Set it up</h2><p>Choose a subject and how much to practise.</p></div>
+            <label for="subjectSelect">Subject</label>
+            <select id="subjectSelect"></select>
+            <label for="topicSelect">Topic coverage</label>
+            <select id="topicSelect"><option value="all">All topics in this subject</option></select>
+            <label for="questionCount">Question set</label>
+            <select id="questionCount"><option value="10">Quick check · 10 questions</option><option value="20">Focused practice · 20 questions</option><option value="40">Extended practice · up to 40 questions</option><option value="all">Full available set</option></select>
+            <div class="info-box"><span>!</span><p>Answer on your own. Unsure? Make your best guess — the explanations afterwards are where the learning happens.</p></div>
+            <button class="primary-btn full-btn" id="beginAssessment">Begin assessment <span>→</span></button>
+          </section>
+          <section class="panel assessment-preview" data-tilt="soft">
+            <svg class="preview-chip" viewBox="0 0 120 100" aria-hidden="true"><use href="#chip"/></svg>
+            <h2>Understand the “why”</h2>
+            <p>You'll get topic-level results, an explanation for every answer, and a suggested revision order.</p>
+            <div class="preview-points"><span>✓ Topic-level feedback</span><span>✓ Explanations for mistakes</span><span>✓ Retest after revision</span></div>
+          </section>
+        </div>
+        <section class="quiz-panel hidden" id="quizPanel"></section>
+        <section class="results-panel hidden" id="resultsPanel"></section>
+      </section>
+
+      <!-- REVISION -->
+      <section class="page" id="page-revision">
+        <div class="page-bar"><button class="back-btn" data-go="dashboard" aria-label="Back to Home">←</button><h1>Revision Plan</h1></div>
+        <div class="plan-hero">
+          <div><h2>Your Personalized Plan</h2><p class="subheading">Focus on these topics to improve your score.</p></div>
+          <div class="plan-art" aria-hidden="true"><div class="sticky sticky-plan">Focus<br><b>Learn</b><br><b>Improve</b></div><i class="book b1"></i><i class="book b2"></i></div>
+        </div>
+        <div id="revisionList" class="plan-list"></div>
+        <div class="tab-row" role="tablist" aria-label="Revision resources">
+          <button class="tab active" role="tab" data-rtab="notes"><svg class="ico" viewBox="0 0 24 24"><rect x="6" y="4" width="12" height="16" rx="2"/><path d="M9 9h6M9 13h6"/></svg>Notes</button>
+          <button class="tab" role="tab" data-rtab="practice"><svg class="ico" viewBox="0 0 24 24"><path d="m4 20 4-1L19 8l-3-3L5 16z"/><path d="m14 7 3 3"/></svg>Practice</button>
+          <button class="tab" role="tab" data-rtab="videos"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m10 9 5 3-5 3z"/></svg>Videos</button>
+        </div>
+        <div id="revisionTab" class="panel tab-panel"></div>
+      </section>
+
+      <!-- PROGRESS -->
+      <section class="page" id="page-progress">
+        <div class="page-bar"><button class="back-btn" data-go="dashboard" aria-label="Back to Home">←</button><h1>Progress Tracking</h1></div>
+        <section class="panel" data-tilt="soft">
+          <div class="chart-head"><h2>Topic Performance Over Time</h2>
+            <div class="legend"><span><i class="lg-dot"></i>Your Score</span><span><i class="lg-dash"></i>Target (80%)</span></div></div>
+          <div id="accuracyChart" class="chart-area"></div>
+        </section>
+        <div class="progress-grid">
+          <section class="panel"><div class="section-heading"><h2>Recent Attempts</h2><button class="text-btn" id="clearHistory">Reset local progress</button></div><div id="historyTable"></div></section>
+          <section class="panel"><div class="section-heading"><h2>Topic status</h2></div><div id="topicStatusList"></div></section>
+        </div>
+        <div id="encourage"></div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section class="page" id="page-settings">
+        <div class="page-bar"><button class="back-btn" data-go="dashboard" aria-label="Back to Home">←</button><h1>Settings</h1></div>
+        <section class="panel settings-panel">
+          <label for="displayName">Display name</label>
+          <div class="inline-form"><input id="displayName" type="text" maxlength="30" autocomplete="off"><button class="primary-btn" id="saveName">Save name</button></div>
+          <label id="themeLabel">Appearance</label>
+          <div class="seg" role="group" aria-labelledby="themeLabel"><button class="seg-btn" id="themeLight" data-theme-set="light">☀ Light</button><button class="seg-btn" id="themeDark" data-theme-set="dark">☾ Dark</button></div>
+          <label>Account</label>
+          <p class="subheading" id="accountStatus"></p>
+          <button class="secondary-btn" id="accountAction">Log in</button>
+          <label>Progress data</label>
+          <p class="subheading">Everything is stored only in this browser. Progress is saved separately for each account (and for guest use). Resetting clears assessments and topic results for the current account but keeps your name and theme.</p>
+          <button class="danger-btn" id="resetProgress">Reset progress</button>
+        </section>
+      </section>
+
+      <footer class="app-footer">StudySense · a learning aid, not a judgement. Results are estimates from the questions attempted.</footer>
+    </main>
+  </div>
+  <div class="auth-overlay hidden" id="authOverlay" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+    <div class="auth-card">
+      <div class="auth-brand">StudySense</div>
+      <h2 id="authTitle">Welcome back</h2>
+      <p class="subheading" id="authSub">Log in to keep your progress under your own account.</p>
+      <div class="seg" role="group" aria-label="Log in or sign up"><button type="button" class="seg-btn" data-auth-mode="login" aria-pressed="true">Log in</button><button type="button" class="seg-btn" data-auth-mode="signup" aria-pressed="false">Sign up</button></div>
+      <form id="authForm" novalidate>
+        <div id="authNameRow" class="hidden"><label for="authName">Display name</label><input id="authName" type="text" maxlength="30" autocomplete="name"></div>
+        <label for="authUser">Username</label><input id="authUser" type="text" maxlength="20" autocomplete="username" autocapitalize="none" spellcheck="false">
+        <label for="authPass">Password</label><input id="authPass" type="password" autocomplete="current-password">
+        <div id="authConfirmRow" class="hidden"><label for="authConfirm">Confirm password</label><input id="authConfirm" type="password" autocomplete="new-password"></div>
+        <p class="auth-error" id="authError" role="alert"></p>
+        <button class="primary-btn full-btn" id="authSubmit" type="submit">Log in</button>
+      </form>
+      <div class="auth-or"><span>or</span></div>
+      <button class="secondary-btn full-btn" id="authGuest" type="button">Continue as guest</button>
+      <p class="auth-note">Accounts are stored only in this browser on this device. There is no server, so passwords can't be reset or synced to other devices.</p>
+    </div>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="question_bank.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
