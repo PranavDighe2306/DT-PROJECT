@@ -40,6 +40,7 @@
         <button class="nav-item" data-page="assessment"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.8 2.8L16 9.5"/></svg>Take Assessment</button>
         <button class="nav-item" data-page="subjects"><svg class="ico" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>My Subjects</button>
         <button class="nav-item" data-page="revision"><svg class="ico" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h4"/></svg>Revision Plan</button>
+        <button class="nav-item" data-page="mistakes"><svg class="ico" viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="m9.5 9.5 5 5M14.5 9.5l-5 5"/></svg>Mistake Notebook<span class="nav-badge hidden" id="mistakeBadge"></span></button>
         <button class="nav-item" data-page="progress"><svg class="ico" viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Progress</button>
         <button class="nav-item" data-page="settings"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>Settings</button>
       </nav>
@@ -144,7 +145,10 @@
           </article>
         </div>
 
+        <div class="resume-slot"></div>
+        <div id="dueCard"></div>
         <div class="section-heading"><h2>Your Subjects</h2><button class="text-btn" data-go="subjects">View all →</button></div>
+        <div class="seg sem-filter" role="group" aria-label="Filter subjects by semester"></div>
         <div id="dashboardSubjects" class="subject-grid"></div>
         <div id="recommendationCard"></div>
       </section>
@@ -153,12 +157,21 @@
       <section class="page" id="page-subjects">
         <div class="page-bar"><button class="back-btn" data-go="dashboard" aria-label="Back to Home">←</button><h1>My Subjects</h1></div>
         <p class="subheading page-sub">A topic is judged on all its questions, never a single slip.</p>
+        <div class="seg sem-filter" role="group" aria-label="Filter subjects by semester"></div>
         <div id="allSubjects" class="subject-cards"></div>
+      </section>
+
+      <!-- MISTAKE NOTEBOOK -->
+      <section class="page" id="page-mistakes">
+        <div class="page-bar"><button class="back-btn" data-go="dashboard" aria-label="Back to Home">←</button><h1>Mistake Notebook</h1></div>
+        <p class="subheading page-sub">Every question you get wrong is saved here and comes back for review after 1, 3 and 7 days.</p>
+        <div id="mistakeBody"></div>
       </section>
 
       <!-- ASSESSMENT -->
       <section class="page" id="page-assessment">
         <div id="assessmentIntro" class="page-bar"><button class="back-btn" data-go="dashboard" aria-label="Back to Home">←</button><h1>Take Assessment</h1></div>
+        <div class="resume-slot"></div>
         <div class="assessment-layout">
           <section class="panel assessment-panel" id="assessmentSetup" data-tilt="soft">
             <div class="panel-title"><h2>Set it up</h2><p>Choose a subject and how much to practise.</p></div>
@@ -169,7 +182,7 @@
             <label for="questionCount">Question set</label>
             <select id="questionCount"><option value="10">Quick check · 10 questions</option><option value="20">Focused practice · 20 questions</option><option value="40">Extended practice · up to 40 questions</option><option value="all">Full available set</option></select>
             <label for="quizMode">Mode</label>
-            <select id="quizMode"><option value="standard">Standard · fixed set of questions</option><option value="adaptive">Adaptive · difficulty adjusts to your answers</option></select>
+            <select id="quizMode"><option value="standard">Standard · fixed set of questions</option><option value="adaptive">Adaptive · difficulty adjusts to your answers</option><option value="mock">Mock test · timed (1 min per question), results at the end</option></select>
             <div class="info-box"><span>!</span><p>Answer on your own. Unsure? Make your best guess — the explanations afterwards are where the learning happens.</p></div>
             <button class="primary-btn full-btn" id="beginAssessment">Begin assessment <span>→</span></button>
           </section>
@@ -233,6 +246,9 @@
           <button class="secondary-btn" id="copyReviewed">Copy reviewed question IDs</button>
           <label>Progress data</label>
           <p class="subheading">Everything is stored only in this browser. Progress is saved separately for each account (and for guest use). Resetting clears assessments and topic results for the current account but keeps your name and theme.</p>
+          <label>Backup</label>
+          <p class="subheading">Download your progress as a file, or restore it on another browser or device.</p>
+          <div class="inline-form"><button class="secondary-btn" id="exportProgress">Export progress</button><button class="secondary-btn" id="importProgress">Import progress</button><input type="file" id="importFile" accept="application/json,.json" hidden></div>
           <button class="danger-btn" id="resetProgress">Reset progress</button>
         </section>
       </section>

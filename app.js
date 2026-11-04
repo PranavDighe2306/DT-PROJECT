@@ -14,19 +14,22 @@ function storageKey() { const u = currentUser(); return u ? `${GUEST_KEY}:u:${u}
 function getAccounts() { try { return JSON.parse(localStorage.getItem(ACCOUNTS_KEY)) || {}; } catch (e) { return {}; } }
 function defaultName() { const u = currentUser(); const acc = u && getAccounts()[u]; return (acc && acc.displayName) || (u ? u : "Pranav"); }
 let state = loadState();
-let currentQuestions = [], currentIndex = 0, answers = {}, lastResult = null, adaptive = null;
+let currentQuestions = [], currentIndex = 0, answers = {}, lastResult = null, adaptive = null, mock = null, sessionKind = "assessment";
 let toastTimer = null, quizStart = 0, timerHandle = null, revisionTab = "notes";
 
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey()));
     if (saved && Array.isArray(saved.history) && saved.topicResults) {
-      saved.settings = Object.assign({ name: defaultName(), theme: "light", reviewedOnly: false, reviewerMode: false }, saved.settings || {});
+      saved.settings = Object.assign({ name: defaultName(), theme: "light", reviewedOnly: false, reviewerMode: false, semester: "all" }, saved.settings || {});
       saved.reviewed = saved.reviewed || {};
+      saved.mistakes = saved.mistakes || {};
+      saved.bookmarks = saved.bookmarks || {};
+      saved.reviewLog = saved.reviewLog || [];
       return saved;
     }
   } catch (error) { console.warn("Could not read saved progress.", error); }
-  return { history: [], topicResults: {}, reviewed: {}, settings: { name: defaultName(), theme: "light", reviewedOnly: false, reviewerMode: false } };
+  return { history: [], topicResults: {}, reviewed: {}, mistakes: {}, bookmarks: {}, reviewLog: [], settings: { name: defaultName(), theme: "light", reviewedOnly: false, reviewerMode: false, semester: "all" } };
 }
 function saveState() {
   try { localStorage.setItem(storageKey(), JSON.stringify(state)); }
@@ -36,6 +39,19 @@ function escapeHTML(value) { return String(value).replace(/[&<>"']/g, ch => ({ "
 function getSubject(id) { return SUBJECTS.find(subject => subject.id === id); }
 function getTopic(subjectId, topicId) { const s = getSubject(subjectId); return s ? s.topics.find(t => t.id === topicId) : null; }
 function latestTopicResult(topicId) { return state.topicResults[topicId] || null; }
+// Weighted diagnosis: a topic's score blends its last few attempts, weighting recent and larger attempts more,
+// so one short quick check can't swing the status on its own.
+const DIAG_DECAY = 0.6, DIAG_MAX_ATTEMPTS = 5;
+function diagnoseTopic(topicId, current) {
+  const attempts = [current].concat(state.history.map(h => h.topicResults && h.topicResults[topicId]).filter(Boolean)).slice(0, DIAG_MAX_ATTEMPTS);
+  let num = 0, den = 0, samples = 0;
+  attempts.forEach((d, i) => { const w = d.total * Math.pow(DIAG_DECAY, i); num += w * (d.correct / d.total); den += w; samples += d.total; });
+  return { accuracy:Math.round(num / den * 100), samples, attempts:attempts.length };
+}
+function confidenceFor(result) {
+  const n = result ? (result.samples || result.total || 0) : 0;
+  return n >= 30 ? { key:"high", label:"High confidence", n } : n >= 15 ? { key:"medium", label:"Medium confidence", n } : { key:"low", label:"Low confidence", n };
+}
 function statusFor(result) {
   if (!result) return { label:"Not assessed", className:"status-unassessed", key:"unassessed" };
   if (result.accuracy >= 80) return { label:"Strong", className:"status-strong", key:"strong" };
@@ -69,14 +85,17 @@ function applyTheme() {
 function navigate(page) {
   document.querySelectorAll(".page").forEach(el => el.classList.toggle("active", el.id === `page-${page}`));
   document.querySelectorAll(".nav-item").forEach(el => el.classList.toggle("active", el.dataset.page === page));
-  const labels = { dashboard:"Home", assessment:"Take Assessment", subjects:"My Subjects", revision:"Revision Plan", progress:"Progress", settings:"Settings" };
+  const labels = { dashboard:"Home", assessment:"Take Assessment", subjects:"My Subjects", revision:"Revision Plan", mistakes:"Mistake Notebook", progress:"Progress", settings:"Settings" };
   document.getElementById("pageCrumb").textContent = labels[page] || "Home";
   closeMenu();
   if (page === "dashboard") renderDashboard();
   if (page === "subjects") renderSubjects();
   if (page === "revision") renderRevision();
+  if (page === "mistakes") renderMistakes();
+  if (page === "assessment") renderResumeCards();
   if (page === "progress") renderProgress();
   if (page === "settings") renderSettings();
+  updateMistakeBadge();
   window.scrollTo({ top:0, behavior:scrollMode() });
 }
 
@@ -124,6 +143,13 @@ function statusCounts(subject) {
   subject.topics.forEach(topic => { const r = latestTopicResult(topic.id); if (!r) return; counts.assessed++; counts[statusFor(r).key]++; });
   return counts;
 }
+function semesterOf(subject) { const m = /Semester\s+(I{1,2})\b/.exec(subject.description || ""); return m ? m[1] : "other"; }
+function visibleSubjects() { const sem = (state.settings && state.settings.semester) || "all"; return sem === "all" ? SUBJECTS : SUBJECTS.filter(s => semesterOf(s) === sem); }
+function renderSemFilter() {
+  const sem = state.settings.semester || "all";
+  const html = [["all", "All"], ["I", "Semester I"], ["II", "Semester II"]].map(([v, l]) => `<button class="seg-btn" data-sem="${v}" aria-pressed="${sem === v}">${l}</button>`).join("");
+  document.querySelectorAll(".sem-filter").forEach(el => { el.innerHTML = html; });
+}
 function allTopicItems() { return SUBJECTS.flatMap(subject => subject.topics.map(topic => ({ subject, topic, result:latestTopicResult(topic.id) }))); }
 
 /* ---------- Home ---------- */
@@ -146,7 +172,8 @@ function renderDashboard() {
     change.innerHTML = `${diff > 0 ? "↑ +" : diff < 0 ? "↓ " : "→ "}${diff}% <small>vs last attempt</small>`;
   } else { change.className = "stat-change"; change.innerHTML = `<small>${state.history.length ? "Retake to see change" : "No attempts yet"}</small>`; }
 
-  document.getElementById("dashboardSubjects").innerHTML = SUBJECTS.map(subject => {
+  renderSemFilter();
+  document.getElementById("dashboardSubjects").innerHTML = visibleSubjects().map(subject => {
     const c = statusCounts(subject), complete = Math.round(c.assessed / subject.topics.length * 100);
     return `<button class="subject-tile" data-tilt data-tone="${subject.color}" data-topic-assess="${subject.id}" data-topic="all" aria-label="Assess ${escapeHTML(subject.name)}">
       <div class="tile-top"><div class="subject-icon ${subject.color}">${subjectIcon(subject.id)}</div><div><div class="subject-name">${escapeHTML(subject.name)}</div><div class="subject-meta">${subject.topics.length} topics · ${complete}% complete</div></div><span class="chev" aria-hidden="true">›</span></div>
@@ -154,11 +181,12 @@ function renderDashboard() {
       <div class="chips"><span class="chip chip-strong">Strong ${c.strong}</span><span class="chip chip-moderate">Moderate ${c.moderate}</span><span class="chip chip-weak">Needs Review ${c.weak}</span></div></button>`;
   }).join("");
 
+  renderDueCard(); renderResumeCards();
   const rec = getRecommendation();
   document.getElementById("recommendationCard").innerHTML = rec ? `
     <div class="next-banner" data-tilt="soft">${SVG_TARGET}
       <div><strong>Next up:</strong> ${rec.result ? "Revise" : "Start with"} ${escapeHTML(rec.topic.name)} (${escapeHTML(rec.subject.name)})
-      <p>${rec.result ? `You scored ${rec.result.accuracy}% in the last assessment. Let's strengthen this topic.` : "Take a short diagnostic to set your first topic baseline."}</p></div>
+      <p>${rec.result ? `Your current estimate is ${rec.result.accuracy}% (${confidenceFor(rec.result).label.toLowerCase()}, ${confidenceFor(rec.result).n} questions). Let's strengthen this topic.` : "Take a short diagnostic to set your first topic baseline."}</p></div>
       <button class="primary-btn" data-topic-assess="${rec.subject.id}" data-topic="${rec.topic.id}">Start Assessment →</button></div>`
     : `<div class="empty-state">All available topics are marked strong. Keep practising to maintain your understanding.</div>`;
 }
@@ -173,10 +201,11 @@ function getRecommendation() {
 
 /* ---------- Subjects ---------- */
 function renderSubjects() {
-  document.getElementById("allSubjects").innerHTML = SUBJECTS.map(subject => {
+  renderSemFilter();
+  document.getElementById("allSubjects").innerHTML = visibleSubjects().map(subject => {
     const topicsHTML = subject.topics.map(topic => {
       const r = latestTopicResult(topic.id), s = statusFor(r);
-      return `<div class="topic-item"><div><strong>${escapeHTML(topic.name)}</strong><small>${r ? `${r.correct}/${r.total} correct in latest attempt` : "Complete a diagnostic to establish a baseline"}</small></div><span class="status-label ${s.className}">${s.label}</span></div>`;
+      return `<div class="topic-item"><div><strong>${escapeHTML(topic.name)}</strong><small>${r ? `Latest ${r.correct}/${r.total} · estimate ${r.accuracy}% · ${confidenceFor(r).label} (${confidenceFor(r).n} questions)` : "Complete a diagnostic to establish a baseline"}</small></div><span class="status-label ${s.className}">${s.label}</span></div>`;
     }).join("");
     return `<article class="subject-card" data-tilt><div class="subject-card-top"><div class="subject-icon ${subject.color}">${subjectIcon(subject.id)}</div><div><h2>${escapeHTML(subject.name)}</h2><p>${escapeHTML(subject.description)}</p></div></div><div class="topic-list">${topicsHTML}</div><button class="primary-btn full-btn" data-topic-assess="${subject.id}" data-topic="all">Assess this subject <span>→</span></button></article>`;
   }).join("");
@@ -202,6 +231,7 @@ const LEVELS = ["easy", "medium", "hard"], LEVEL_LABEL = { easy:"Easy", medium:"
 const TYPE_BADGE = { multi:"Select all that apply", assertion:"Assertion–Reason", numerical:"Numerical", application:"Application" };
 // Options like "Both A and R…" or "All of the above" depend on their position, so those questions are never shuffled.
 const PINNED_RE = /of the above|\bboth\s+(a|b|c|d|1|2|3|4)\b|\bneither\s+(a|b)\b|\ball\s+(a|b)\b/i;
+function toggleBookmark(id) { if (state.bookmarks[id]) delete state.bookmarks[id]; else state.bookmarks[id] = true; saveState(); }
 function isReviewed(q) { return q.reviewed === true || !!(state.reviewed && state.reviewed[q.id]); }
 function shuffle(arr) { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; }
 function prepareQuestion(q) {
@@ -236,8 +266,11 @@ function pickAdaptive() {
 
 function beginAssessment(subjectId, topicId) {
   const subjectSelect = document.getElementById("subjectSelect"), topicSelect = document.getElementById("topicSelect");
+  const prevTopic = topicSelect.value;   // updateTopicOptions() rebuilds the list, so remember what the person picked
   if (subjectId) subjectSelect.value = subjectId;
-  updateTopicOptions(); if (topicId) topicSelect.value = topicId;
+  updateTopicOptions();
+  const wantTopic = topicId || (subjectId ? "all" : prevTopic);
+  topicSelect.value = wantTopic; if (topicSelect.value !== wantTopic) topicSelect.value = "all";
   const subject = getSubject(subjectSelect.value), selectedTopic = topicSelect.value;
   let pool = QUESTIONS.filter(q => q.subject === subject.id && (selectedTopic === "all" || q.topic === selectedTopic));
   if (state.settings.reviewedOnly) {
@@ -250,11 +283,15 @@ function beginAssessment(subjectId, topicId) {
   if (document.getElementById("quizMode").value === "adaptive") {
     const maxLevel = Math.max(...pool.map(q => Math.max(0, LEVELS.indexOf(q.difficulty))));
     adaptive = { pool, level:Math.min(1, maxLevel), maxLevel, used:new Set(), topicCount:{}, total:Math.min(count, pool.length) };
-    currentQuestions = [pickAdaptive()];
+    currentQuestions = [pickAdaptive()]; mock = null;
   } else {
     adaptive = null;
     currentQuestions = shuffle(pool.slice()).slice(0, count).map(prepareQuestion);
+    mock = document.getElementById("quizMode").value === "mock" ? { limitSec:Math.min(currentQuestions.length, 90) * 60 } : null;   // 1 minute per question
   }
+  sessionKind = "assessment"; launchQuiz();
+}
+function launchQuiz() {
   currentIndex = 0; answers = {}; lastResult = null;
   showSetup(false);
   document.getElementById("resultsPanel").classList.add("hidden");
@@ -264,30 +301,40 @@ function beginAssessment(subjectId, topicId) {
 }
 function startTimer() {
   stopTimer(); quizStart = Date.now();
-  timerHandle = setInterval(() => setText("quizTimer", fmtTime((Date.now() - quizStart) / 1000)), 1000);
+  timerHandle = setInterval(() => {
+    setText("quizTimer", timerText());
+    const pill = document.getElementById("timerPill"); if (pill && mock) pill.classList.toggle("timer-low", remainingSec() <= 60);
+    if (mock && remainingSec() <= 0) { stopTimer(); showToast("Time's up. Submitting your answers."); finishAssessment(); }
+  }, 1000);
 }
+function elapsedSec() { return (Date.now() - quizStart) / 1000; }
+function remainingSec() { return mock ? mock.limitSec - elapsedSec() : 0; }
+function timerText() { return fmtTime(mock ? remainingSec() : elapsedSec()); }
 function stopTimer() { if (timerHandle) { clearInterval(timerHandle); timerHandle = null; } }
 function renderQuestion() {
   const question = currentQuestions[currentIndex], subject = getSubject(question.subject), topic = getTopic(question.subject, question.topic);
   const total = quizTotal(), panel = document.getElementById("quizPanel"), multi = Array.isArray(question.answer);
   const badges = [];
   if (TYPE_BADGE[question.type]) badges.push(`<span class="q-badge">${TYPE_BADGE[question.type]}</span>`);
+  if (mock) badges.push(`<span class="q-badge q-mock">Mock test · skip and return freely</span>`);
   if (adaptive) badges.push(`<span class="q-badge q-adapt">Adaptive · ${LEVEL_LABEL[LEVELS[adaptive.level]]}</span>`);
+  badges.push(`<button class="q-badge q-flag" id="toggleFlag" aria-pressed="${!!state.bookmarks[question.id]}">${state.bookmarks[question.id] ? "★ Flagged" : "☆ Flag for later"}</button>`);
   if (state.settings.reviewerMode) badges.push(question.reviewed === true ? `<span class="q-badge q-ok">✓ Reviewed</span>` : `<button class="q-badge q-review" id="toggleReviewed">${state.reviewed[question.id] ? "✓ Reviewed (undo)" : "Mark as reviewed"}</button>`);
   panel.innerHTML = `
     <div class="quiz-card">
       <div class="quiz-top"><button class="back-btn" id="quizBack" aria-label="Leave assessment">←</button>
         <div class="qt"><h2>${escapeHTML(subject.name)}</h2><div class="quiz-topic">${escapeHTML(topic.name)}</div></div>
-        <span class="timer-pill" title="Time spent"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 3h6"/></svg><span id="quizTimer">${fmtTime((Date.now() - quizStart) / 1000)}</span></span></div>
+        <span class="timer-pill ${mock && remainingSec() <= 60 ? "timer-low" : ""}" id="timerPill" title="${mock ? "Time left" : "Time spent"}"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 3h6"/></svg><span id="quizTimer">${timerText()}</span></span></div>
       <div class="quiz-count">${currentIndex + 1} / ${total}</div>
+      ${mock ? `<div class="q-nav" role="group" aria-label="Question navigator">${currentQuestions.map((q, i) => `<button class="q-nav-btn ${hasAnswer(q) ? "answered" : ""} ${i === currentIndex ? "current" : ""}" data-jump="${i}" aria-label="Question ${i + 1}, ${hasAnswer(q) ? "answered" : "not answered"}" ${i === currentIndex ? 'aria-current="true"' : ""}>${i + 1}</button>`).join("")}</div>` : ""}
       <div class="quiz-progress" role="progressbar" aria-valuemin="1" aria-valuemax="${total}" aria-valuenow="${currentIndex + 1}"><span style="width:${((currentIndex + 1) / total) * 100}%"></span></div>
       <div class="question-card" data-tilt="soft">
         <div class="question-art" aria-hidden="true">${quizArt(question.subject)}</div>
         <div class="question-body">${badges.length ? `<div class="q-badges">${badges.join("")}</div>` : ""}<h2 class="question-text">${escapeHTML(question.text)}</h2>
           <div class="answer-options" role="group" aria-label="${multi ? "Select all that apply" : "Choose one answer"}">${question.options.map((o, i) => `<button class="answer-option ${isChosen(question, i) ? "selected" : ""}" data-answer="${i}" aria-pressed="${isChosen(question, i)}"><span class="option-letter">${String.fromCharCode(65 + i)}</span><span class="option-text">${escapeHTML(o)}</span></button>`).join("")}</div>
-          <div class="quiz-controls"><button class="secondary-btn ${adaptive ? "hidden" : ""}" id="previousQuestion" ${currentIndex === 0 || adaptive ? "disabled" : ""}>← Previous</button><button class="dark-btn" id="nextQuestion">${currentIndex === total - 1 ? "Finish assessment" : "Next"} →</button></div></div>
+          <div class="quiz-controls"><button class="secondary-btn ${adaptive ? "hidden" : ""}" id="previousQuestion" ${currentIndex === 0 || adaptive ? "disabled" : ""}>← Previous</button><button class="dark-btn" id="nextQuestion">${currentIndex === total - 1 ? "Finish assessment" : mock && !hasAnswer(question) ? "Skip" : "Next"} →</button></div></div>
       </div>
-      <div class="kbd-hint"><kbd>A</kbd>–<kbd>D</kbd> or <kbd>1</kbd>–<kbd>4</kbd> to ${multi ? "toggle" : "answer"} · <kbd>Enter</kbd> next${adaptive ? "" : " · <kbd>←</kbd> back"}</div>
+      <div class="kbd-hint"><kbd>A</kbd>–<kbd>D</kbd> or <kbd>1</kbd>–<kbd>4</kbd> to ${multi ? "toggle" : "answer"} · <kbd>Enter</kbd> ${mock ? "next / skip" : "next"}${adaptive ? "" : " · <kbd>←</kbd> back"}</div>
     </div>
     <div class="quiz-deco" aria-hidden="true"><div class="notebook"></div><i class="pencil"></i><div class="sticky sticky-teal sticky-quiz">Think.<br>Apply.<br>Grow.</div></div>`;
   panel.querySelectorAll("[data-answer]").forEach(b => b.addEventListener("click", () => {
@@ -296,11 +343,20 @@ function renderQuestion() {
     else answers[question.id] = i;
     renderQuestion();
   }));
+  saveQuiz();
+  panel.querySelectorAll("[data-jump]").forEach(b => b.addEventListener("click", () => { currentIndex = Number(b.dataset.jump); renderQuestion(); }));
+  document.getElementById("toggleFlag").addEventListener("click", () => { toggleBookmark(question.id); renderQuestion(); });
   const rv = document.getElementById("toggleReviewed");
   if (rv) rv.addEventListener("click", () => { if (state.reviewed[question.id]) delete state.reviewed[question.id]; else state.reviewed[question.id] = true; saveState(); renderQuestion(); });
-  document.getElementById("quizBack").addEventListener("click", () => { if (confirm("Leave this assessment? Your answers so far won't be saved.")) resetAssessment(); });
+  document.getElementById("quizBack").addEventListener("click", () => { saveQuiz(); resetAssessment(true); renderResumeCards(); showToast("Progress saved. Resume it any time from Home."); });
   document.getElementById("previousQuestion").addEventListener("click", () => { if (currentIndex > 0) { currentIndex--; renderQuestion(); } });
   document.getElementById("nextQuestion").addEventListener("click", () => {
+    if (mock) {
+      if (currentIndex < total - 1) { currentIndex++; renderQuestion(); return; }
+      const left = currentQuestions.filter(q => !hasAnswer(q)).length;
+      if (left && !confirm(`${left} question${left === 1 ? " is" : "s are"} unanswered and will count as wrong. Submit anyway?`)) return;
+      finishAssessment(); return;
+    }
     if (!hasAnswer(question)) { showToast(multi ? "Select at least one answer before continuing." : "Choose an answer before continuing."); return; }
     if (adaptive) {
       if (currentQuestions.length >= adaptive.total) { finishAssessment(); return; }
@@ -314,8 +370,8 @@ function renderQuestion() {
   });
 }
 function finishAssessment() {
-  stopTimer();
-  const durationSec = Math.round((Date.now() - quizStart) / 1000);
+  stopTimer(); clearSavedQuiz();
+  const durationSec = Math.round(mock ? Math.min(mock.limitSec, elapsedSec()) : elapsedSec());
   const subject = getSubject(currentQuestions[0].subject);
   let correct = 0; currentQuestions.forEach(q => { if (isCorrect(q, answers[q.id])) correct++; });
   const accuracy = Math.round(correct / currentQuestions.length * 100);
@@ -324,16 +380,20 @@ function finishAssessment() {
     if (!topicMap[q.topic]) topicMap[q.topic] = { total:0, correct:0 };
     topicMap[q.topic].total++; if (isCorrect(q, answers[q.id])) topicMap[q.topic].correct++;
   });
-  const now = Date.now();
-  Object.entries(topicMap).forEach(([topicId, d]) => { state.topicResults[topicId] = { accuracy:Math.round(d.correct / d.total * 100), correct:d.correct, total:d.total, updatedAt:now }; });
+  const now = Date.now(), isReview = sessionKind === "review";
+  updateMistakes(now);
+  if (!isReview) Object.entries(topicMap).forEach(([topicId, d]) => { const dg = diagnoseTopic(topicId, d); state.topicResults[topicId] = { accuracy:dg.accuracy, correct:d.correct, total:d.total, samples:dg.samples, attempts:dg.attempts, updatedAt:now }; });
   const keys = Object.keys(topicMap);
-  const scopeName = keys.length === 1 ? getTopic(subject.id, keys[0]).name : "Mixed topics";
-  const result = { id:now, date:new Date().toISOString(), subjectId:subject.id, subjectName:subject.name, scopeName, accuracy, correct, total:currentQuestions.length, durationSec, topicResults:topicMap, questionIds:currentQuestions.map(q => q.id), mode:adaptive ? "adaptive" : "standard" };
-  state.history.unshift(result); saveState(); lastResult = result;
+  const scopeName = isReview ? "Spaced review" : keys.length === 1 ? getTopic(subject.id, keys[0]).name : "Mixed topics";
+  const result = { id:now, date:new Date().toISOString(), subjectId:subject.id, subjectName:subject.name, scopeName, accuracy, correct, total:currentQuestions.length, durationSec, topicResults:topicMap, questionIds:currentQuestions.map(q => q.id), mode:isReview ? "review" : adaptive ? "adaptive" : mock ? "mock" : "standard", unanswered:currentQuestions.filter(q => !hasAnswer(q)).length };
+  // Review sessions are small, targeted drills: log them separately so they don't skew topic results or history.
+  if (isReview) { state.reviewLog.unshift({ date:result.date, subjectId:subject.id, correct, total:result.total }); state.reviewLog = state.reviewLog.slice(0, 50); }
+  else state.history.unshift(result);
+  saveState(); lastResult = result; updateMistakeBadge();
   document.getElementById("quizPanel").classList.add("hidden");
   renderResults(result);
   document.getElementById("resultsPanel").classList.remove("hidden");
-  if (accuracy >= 80) confetti();
+  if (accuracy >= 80 && !isReview) confetti();
   window.scrollTo({ top:0, behavior:scrollMode() });
 }
 
@@ -353,18 +413,20 @@ function renderResults(result) {
   const detail = currentQuestions.map((q, i) => {
     const ok = isCorrect(q, answers[q.id]);
     const steps = q.steps && q.steps.length ? `<p><strong>Worked steps:</strong></p><ol class="steps-list">${q.steps.map(st => `<li>${escapeHTML(st)}</li>`).join("")}</ol>` : "";
+    const flag = `<button class="secondary-btn mini-btn" data-flag="${escapeHTML(q.id)}">${state.bookmarks[q.id] ? "★ Flagged (remove)" : "☆ Flag for later"}</button>`;
     const review = state.settings.reviewerMode && q.reviewed !== true ? `<button class="secondary-btn mini-btn" data-review="${escapeHTML(q.id)}">${state.reviewed[q.id] ? "✓ Reviewed (undo)" : "Mark as reviewed"}</button>` : "";
-    return `<div class="feedback-item"><h3>${i + 1}. ${escapeHTML(q.text)}</h3><p class="${ok ? "correct-text" : "incorrect-text"}">${ok ? "✓ Correct" : "✕ Needs review"} · Your answer: ${escapeHTML(answerText(q, answers[q.id]))}</p><p><strong>Correct answer:</strong> ${escapeHTML(correctText(q))}</p><p><strong>Why:</strong> ${escapeHTML(q.explanation)}</p>${steps}${review}</div>`;
+    return `<div class="feedback-item"><h3>${i + 1}. ${escapeHTML(q.text)}</h3><p class="${ok ? "correct-text" : "incorrect-text"}">${ok ? "✓ Correct" : "✕ Needs review"} · Your answer: ${escapeHTML(answerText(q, answers[q.id]))}</p><p><strong>Correct answer:</strong> ${escapeHTML(correctText(q))}</p><p><strong>Why:</strong> ${escapeHTML(q.explanation)}</p>${steps}${flag} ${review}</div>`;
   }).join("");
   document.getElementById("resultsPanel").innerHTML = `
     <div class="page-bar"><button class="back-btn" id="resultsBack" aria-label="Back to Take Assessment">←</button><h1>Assessment Results</h1></div>
     <div class="results-top">
-      <div class="result-card score-card" data-tilt="soft"><div><small>Overall Score</small><div class="big-score">${result.accuracy}%</div><small>(${result.correct}/${result.total}) · ${fmtTime(result.durationSec)}${result.mode === "adaptive" ? " · Adaptive" : ""}</small></div>${donutSVG(result.accuracy, 84, 11)}</div>
+      <div class="result-card score-card" data-tilt="soft"><div><small>Overall Score</small><div class="big-score">${result.accuracy}%</div><small>(${result.correct}/${result.total}) · ${fmtTime(result.durationSec)}${result.mode === "adaptive" ? " · Adaptive" : result.mode === "review" ? " · Spaced review" : result.mode === "mock" ? " · Mock test" : ""}${result.unanswered ? ` · ${result.unanswered} unanswered` : ""}</small></div>${donutSVG(result.accuracy, 84, 11)}</div>
       <div class="result-card feedback-card" data-tilt="soft"><span class="fb-icon" aria-hidden="true">★</span><div><h3>${fb[0]}</h3><p>${fb[1]}</p></div></div>
       ${SVG_TROPHY}
     </div>
     <h2>Topic-wise Performance</h2>
     <div class="perf-list">${perfHTML}</div>
+    ${result.mode !== "review" && result.total < 15 ? `<p class="conf-note">This attempt covers only ${result.total} questions, so treat it as an estimate. Each topic's status blends your recent attempts (newer ones count more), and its confidence grows as you answer more questions.</p>` : ""}
     <div class="results-actions"><button class="dark-btn" id="toggleDetail">View Detailed Analysis →</button><button class="primary-btn" id="retestWeak">Retest ${weak ? escapeHTML(weak.topic.name) : "weak topic"}</button><button class="secondary-btn" id="newAssessment">New assessment</button><button class="secondary-btn" id="viewProgress">View progress</button></div>
     <div class="feedback-list hidden" id="detailedAnalysis">${detail}</div>`;
   document.getElementById("toggleDetail").addEventListener("click", e => {
@@ -377,17 +439,218 @@ function renderResults(result) {
   document.getElementById("resultsBack").addEventListener("click", resetAssessment);
   document.getElementById("viewProgress").addEventListener("click", () => navigate("progress"));
   document.getElementById("detailedAnalysis").addEventListener("click", e => {
+    const fb = e.target.closest("[data-flag]");
+    if (fb) { toggleBookmark(fb.dataset.flag); fb.textContent = state.bookmarks[fb.dataset.flag] ? "★ Flagged (remove)" : "☆ Flag for later"; return; }
     const b = e.target.closest("[data-review]"); if (!b) return;
     const id = b.dataset.review;
     if (state.reviewed[id]) delete state.reviewed[id]; else state.reviewed[id] = true;
     saveState(); b.textContent = state.reviewed[id] ? "✓ Reviewed (undo)" : "Mark as reviewed";
   });
 }
-function resetAssessment() {
-  stopTimer(); adaptive = null; showSetup(true);
+function resetAssessment(keepSaved) {
+  stopTimer(); adaptive = null; mock = null; if (keepSaved !== true) clearSavedQuiz(); showSetup(true);
   document.getElementById("quizPanel").classList.add("hidden"); document.getElementById("resultsPanel").classList.add("hidden");
   window.scrollTo({ top:0, behavior:scrollMode() });
 }
+
+/* ---------- Mistake notebook & spaced repetition ---------- */
+const DAY_MS = 86400000, REVIEW_DAYS = [1, 3, 7];   // wrong -> review in 1 day, then 3, then 7, then mastered
+const QUESTION_BY_ID = Object.fromEntries(QUESTIONS.map(q => [q.id, q]));
+function mistakeEntries() { return Object.entries(state.mistakes || {}).filter(([id]) => QUESTION_BY_ID[id]).map(([id, m]) => Object.assign({ id, q:QUESTION_BY_ID[id] }, m)); }
+function bookmarkEntries() {
+  return Object.keys(state.bookmarks || {}).filter(id => QUESTION_BY_ID[id]).map(id => Object.assign({ id, q:QUESTION_BY_ID[id], subject:QUESTION_BY_ID[id].subject, topic:QUESTION_BY_ID[id].topic, wrong:0, due:Infinity, mastered:false, bookmarkOnly:true }, state.mistakes[id] || {}, state.mistakes[id] ? { bookmarkOnly:false } : {}));
+}
+function isDue(m, now = Date.now()) { return !m.mastered && m.due <= now; }
+function dueEntries(subjectId) { return mistakeEntries().filter(m => isDue(m) && (!subjectId || m.subject === subjectId)); }
+function dueLabel(m) {
+  if (m.bookmarkOnly) return "Bookmarked";
+  if (m.mastered) return "Mastered";
+  if (isDue(m)) return "Due now";
+  const days = Math.ceil((m.due - Date.now()) / DAY_MS);
+  return `Due in ${days} day${days === 1 ? "" : "s"}`;
+}
+// Called when an assessment finishes: wrong answers enter (or restart) the schedule; a correct answer to a due question moves it along.
+function updateMistakes(now) {
+  currentQuestions.forEach(q => {
+    const m = state.mistakes[q.id];
+    if (!isCorrect(q, answers[q.id])) {
+      state.mistakes[q.id] = { subject:q.subject, topic:q.topic, wrong:(m ? m.wrong : 0) + 1, box:0, due:now + REVIEW_DAYS[0] * DAY_MS, last:now, mastered:false };
+    } else if (m && !m.mastered && m.due <= now) {
+      if (m.box >= REVIEW_DAYS.length - 1) { m.mastered = true; m.masteredAt = now; }
+      else { m.box++; m.due = now + REVIEW_DAYS[m.box] * DAY_MS; }
+    }
+  });
+}
+function updateMistakeBadge() {
+  const n = dueEntries().length, el = document.getElementById("mistakeBadge");
+  if (el) { el.textContent = n > 99 ? "99+" : n; el.classList.toggle("hidden", !n); }
+}
+function renderDueCard() {
+  const el = document.getElementById("dueCard"); if (!el) return;
+  const all = mistakeEntries(), due = dueEntries(), active = all.filter(m => !m.mastered);
+  if (!all.length) { el.innerHTML = ""; return; }
+  if (due.length) {
+    el.innerHTML = `<div class="next-banner due-banner" data-tilt="soft"><span class="due-icon" aria-hidden="true">🔁</span>
+      <div><strong>${due.length} question${due.length === 1 ? " is" : "s are"} due for review</strong><p>Questions you missed come back after 1, 3 and 7 days. Answering them correctly locks them in.</p></div>
+      <button class="primary-btn" data-go="mistakes">Review now →</button></div>`;
+  } else if (active.length) {
+    const next = Math.min(...active.map(m => m.due)), days = Math.max(1, Math.ceil((next - Date.now()) / DAY_MS));
+    el.innerHTML = `<div class="next-banner due-banner"><span class="due-icon" aria-hidden="true">✅</span><div><strong>Nothing due for review</strong><p>Your next review is in ${days} day${days === 1 ? "" : "s"}. ${active.length} question${active.length === 1 ? "" : "s"} still in your notebook.</p></div><button class="secondary-btn" data-go="mistakes">Open notebook</button></div>`;
+  } else el.innerHTML = "";
+}
+function beginReview(subjectId) {
+  const due = dueEntries(subjectId);
+  if (!due.length) { showToast("Nothing is due for review in that subject."); return; }
+  const picked = shuffle(due.slice()).slice(0, 20);
+  currentQuestions = picked.map(m => prepareQuestion(m.q)); adaptive = null; mock = null; sessionKind = "review";
+  navigate("assessment"); launchQuiz();
+}
+let mistakeFilter = { subject:"all", topic:"all", status:"active" };
+function renderMistakes() {
+  const all = mistakeEntries(), due = dueEntries(), bookmarked = bookmarkEntries();
+  const base = mistakeFilter.status === "bookmarked" ? bookmarked : all;
+  const subjectOpts = `<option value="all">All subjects</option>` + SUBJECTS.filter(s => base.some(m => m.subject === s.id)).map(s => `<option value="${s.id}" ${mistakeFilter.subject === s.id ? "selected" : ""}>${escapeHTML(s.name)}</option>`).join("");
+  const subj = getSubject(mistakeFilter.subject);
+  const topicOpts = `<option value="all">All topics</option>` + (subj ? subj.topics.filter(t => base.some(m => m.topic === t.id)).map(t => `<option value="${t.id}" ${mistakeFilter.topic === t.id ? "selected" : ""}>${escapeHTML(t.name)}</option>`).join("") : "");
+  let list = base.filter(m => (mistakeFilter.subject === "all" || m.subject === mistakeFilter.subject) && (mistakeFilter.topic === "all" || m.topic === mistakeFilter.topic));
+  if (mistakeFilter.status === "active") list = list.filter(m => !m.mastered);
+  else if (mistakeFilter.status === "due") list = list.filter(m => isDue(m));
+  else if (mistakeFilter.status === "mastered") list = list.filter(m => m.mastered);
+  list.sort((a, b) => (a.mastered - b.mastered) || a.due - b.due);
+  const dueBySubject = SUBJECTS.map(s => ({ s, n:due.filter(m => m.subject === s.id).length })).filter(x => x.n);
+  const mastered = all.filter(m => m.mastered).length;
+  const cards = list.map(m => {
+    const q = m.q, topic = getTopic(q.subject, q.topic), tag = m.mastered ? "ok" : isDue(m) ? "due" : "wait";
+    const steps = q.steps && q.steps.length ? `<p><strong>Worked steps:</strong></p><ol class="steps-list">${q.steps.map(st => `<li>${escapeHTML(st)}</li>`).join("")}</ol>` : "";
+    return `<details class="mistake-card"><summary><span class="m-q">${escapeHTML(q.text)}</span><span class="m-meta">${state.bookmarks[q.id] ? "★ " : ""}${escapeHTML(topic ? topic.name : q.topic)}${m.wrong ? ` · missed ${m.wrong}×` : ""}</span><span class="m-tag m-${tag}">${dueLabel(m)}</span></summary>
+      <div class="m-body"><p><strong>Correct answer:</strong> ${escapeHTML(correctText(q))}</p><p><strong>Why:</strong> ${escapeHTML(q.explanation)}</p>${steps}<button class="secondary-btn mini-btn" data-flag="${escapeHTML(q.id)}">${state.bookmarks[q.id] ? "★ Remove bookmark" : "☆ Bookmark"}</button></div></details>`;
+  }).join("");
+  document.getElementById("mistakeBody").innerHTML = `
+    <div class="mistake-summary">
+      <div class="result-card"><small>In notebook</small><div class="big-score">${all.length - mastered}</div></div>
+      <div class="result-card"><small>Due now</small><div class="big-score">${due.length}</div></div>
+      <div class="result-card"><small>Mastered</small><div class="big-score">${mastered}</div></div>
+      <div class="result-card"><small>Bookmarked</small><div class="big-score">${bookmarked.length}</div></div>
+    </div>
+    ${dueBySubject.length ? `<div class="due-actions">${dueBySubject.map(x => `<button class="primary-btn" data-review-subject="${x.s.id}">Review ${escapeHTML(x.s.name)} (${x.n})</button>`).join("")}</div>` : ""}
+    ${all.length || bookmarked.length ? `<div class="mistake-filters">
+      <div><label for="mfSubject">Subject</label><select id="mfSubject">${subjectOpts}</select></div>
+      <div><label for="mfTopic">Topic</label><select id="mfTopic">${topicOpts}</select></div>
+      <div><label for="mfStatus">Show</label><select id="mfStatus">${[["active","In notebook"],["due","Due now"],["mastered","Mastered"],["bookmarked","Bookmarked"],["all","All mistakes"]].map(([v, l]) => `<option value="${v}" ${mistakeFilter.status === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+    </div>
+    <div class="mistake-list">${cards || `<div class="empty-state">No questions match this filter.</div>`}</div>`
+    : `<div class="empty-state">Your notebook is empty. Questions you answer wrongly are saved here with their explanations and come back for review after 1, 3 and 7 days.</div>`}`;
+}
+document.getElementById("mistakeBody").addEventListener("change", e => {
+  if (e.target.id === "mfSubject") { mistakeFilter.subject = e.target.value; mistakeFilter.topic = "all"; }
+  else if (e.target.id === "mfTopic") mistakeFilter.topic = e.target.value;
+  else if (e.target.id === "mfStatus") mistakeFilter.status = e.target.value;
+  else return;
+  renderMistakes();
+});
+document.getElementById("mistakeBody").addEventListener("click", e => {
+  const f = e.target.closest("[data-flag]"); if (f) { toggleBookmark(f.dataset.flag); renderMistakes(); return; }
+  const b = e.target.closest("[data-review-subject]"); if (b) beginReview(b.dataset.reviewSubject);
+});
+
+/* ---------- Auto-save & resume ---------- */
+const QUIZ_KEY_BASE = "studysense-quiz-v1";
+function quizKey() { const u = currentUser(); return u ? `${QUIZ_KEY_BASE}:u:${u}` : QUIZ_KEY_BASE; }
+function quizActive() { return currentQuestions.length > 0 && !document.getElementById("quizPanel").classList.contains("hidden"); }
+function saveQuiz() {
+  if (!quizActive()) return;
+  try {
+    localStorage.setItem(quizKey(), JSON.stringify({ v:1, savedAt:Date.now(), sessionKind, currentIndex, answers, elapsed:elapsedSec(), mock,
+      qs:currentQuestions.map(q => ({ id:q.id, options:q.options, answer:q.answer })),
+      adaptive:adaptive ? { pool:adaptive.pool.map(q => q.id), level:adaptive.level, maxLevel:adaptive.maxLevel, used:Array.from(adaptive.used), topicCount:adaptive.topicCount, total:adaptive.total } : null }));
+  } catch (e) { /* storage full or blocked: auto-save is best-effort */ }
+}
+function clearSavedQuiz() { try { localStorage.removeItem(quizKey()); } catch (e) { /* ignore */ } }
+function readSavedQuiz() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(quizKey()));
+    if (!saved || !Array.isArray(saved.qs) || !saved.qs.length) return null;
+    const questions = saved.qs.map(x => QUESTION_BY_ID[x.id] ? Object.assign({}, QUESTION_BY_ID[x.id], { options:x.options, answer:x.answer }) : null);
+    if (questions.some(q => !q)) return null;
+    saved.questions = questions; return saved;
+  } catch (e) { return null; }
+}
+function renderResumeCards() {
+  const saved = quizActive() ? null : readSavedQuiz();
+  let html = "";
+  if (saved) {
+    const answered = saved.questions.filter(q => { const a = saved.answers && saved.answers[q.id]; return Array.isArray(a) ? a.length : a !== undefined; }).length;
+    const total = saved.adaptive ? saved.adaptive.total : saved.questions.length;
+    const kind = saved.sessionKind === "review" ? "spaced review" : saved.mock ? "mock test" : saved.adaptive ? "adaptive assessment" : "assessment";
+    html = `<div class="next-banner due-banner"><span class="due-icon" aria-hidden="true">⏸️</span><div><strong>You have an unfinished ${kind}</strong><p>${answered} of ${total} answered${saved.mock ? " · the mock-test timer is paused" : ""}. Saved ${formatDate(saved.savedAt)}.</p></div><button class="primary-btn" data-action="resume-quiz">Resume →</button><button class="secondary-btn" data-action="discard-quiz">Discard</button></div>`;
+  }
+  document.querySelectorAll(".resume-slot").forEach(el => { el.innerHTML = html; });
+}
+function resumeQuiz() {
+  const saved = readSavedQuiz();
+  if (!saved) { showToast("Nothing to resume."); renderResumeCards(); return; }
+  currentQuestions = saved.questions; currentIndex = Math.max(0, Math.min(saved.currentIndex || 0, saved.questions.length - 1));
+  answers = saved.answers || {}; sessionKind = saved.sessionKind || "assessment"; mock = saved.mock || null; lastResult = null;
+  adaptive = saved.adaptive ? { pool:saved.adaptive.pool.map(id => QUESTION_BY_ID[id]).filter(Boolean), level:saved.adaptive.level, maxLevel:saved.adaptive.maxLevel, used:new Set(saved.adaptive.used), topicCount:saved.adaptive.topicCount || {}, total:saved.adaptive.total } : null;
+  navigate("assessment"); showSetup(false);
+  document.getElementById("resultsPanel").classList.add("hidden");
+  document.getElementById("quizPanel").classList.remove("hidden");
+  startTimer(); quizStart = Date.now() - (saved.elapsed || 0) * 1000;   // time spent away doesn't count
+  renderQuestion(); renderResumeCards();
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-action]"); if (!b) return;
+  if (b.dataset.action === "resume-quiz") resumeQuiz();
+  else if (b.dataset.action === "discard-quiz" && confirm("Discard your unfinished assessment?")) { clearSavedQuiz(); renderResumeCards(); }
+});
+window.addEventListener("pagehide", saveQuiz);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveQuiz(); });
+
+/* ---------- Export / import progress ---------- */
+function exportProgress() {
+  const payload = { app:"studysense", version:1, exportedAt:new Date().toISOString(), account:currentUser() || "guest", data:state };
+  const blob = new Blob([JSON.stringify(payload, null, 1)], { type:"application/json" });
+  const a = document.createElement("a"), day = new Date().toISOString().slice(0, 10);
+  a.href = URL.createObjectURL(blob); a.download = `studysense-progress-${day}.json`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  showToast("Progress exported.");
+}
+function parseImported(text) {
+  let obj; try { obj = JSON.parse(text); } catch (e) { return { error:"That file isn't valid JSON." }; }
+  const data = obj && obj.app === "studysense" && obj.data ? obj.data : obj;
+  const isObj = v => v && typeof v === "object" && !Array.isArray(v);
+  if (!data || !Array.isArray(data.history) || !isObj(data.topicResults)) return { error:"That doesn't look like a StudySense progress file." };
+  const imported = {
+    history:data.history.filter(h => isObj(h) && isObj(h.topicResults)),
+    topicResults:data.topicResults,
+    reviewed:isObj(data.reviewed) ? data.reviewed : {},
+    mistakes:isObj(data.mistakes) ? data.mistakes : {},
+    bookmarks:isObj(data.bookmarks) ? data.bookmarks : {},
+    reviewLog:Array.isArray(data.reviewLog) ? data.reviewLog : [],
+    settings:Object.assign({}, state.settings, isObj(data.settings) ? data.settings : {})
+  };
+  return { imported };
+}
+function importProgress(text) {
+  const r = parseImported(text);
+  if (r.error) { showToast(r.error); return; }
+  const n = r.imported.history.length;
+  if (!confirm(`Replace the progress on this ${currentUser() ? "account" : "guest profile"} with the file (${n} assessment${n === 1 ? "" : "s"})? This can't be undone.`)) return;
+  state = r.imported; saveState(); clearSavedQuiz(); applyTheme();
+  renderDashboard(); renderSubjects(); renderProgress(); renderRevision(); renderMistakes(); renderSettings(); updateMistakeBadge(); renderResumeCards();
+  showToast("Progress imported.");
+}
+document.getElementById("exportProgress").addEventListener("click", exportProgress);
+document.getElementById("importProgress").addEventListener("click", () => document.getElementById("importFile").click());
+document.getElementById("importFile").addEventListener("change", e => {
+  const file = e.target.files && e.target.files[0]; e.target.value = ""; if (!file) return;
+  if (file.size > 5 * 1024 * 1024) { showToast("That file is too large to be a progress export."); return; }
+  const reader = new FileReader(); reader.onload = () => importProgress(String(reader.result)); reader.onerror = () => showToast("Couldn't read that file."); reader.readAsText(file);
+});
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-sem]"); if (!b) return;
+  state.settings.semester = b.dataset.sem; saveState(); renderDashboard(); renderSubjects();
+});
 
 /* ---------- Revision plan ---------- */
 function priorityFor(accuracy) { return accuracy <= 50 ? { key:"high", label:"High Priority" } : accuracy <= 69 ? { key:"medium", label:"Medium Priority" } : { key:"low", label:"Low Priority" }; }
@@ -400,7 +663,7 @@ function renderRevision() {
   } else list.innerHTML = items.map((it, i) => {
     const p = priorityFor(it.result.accuracy), qn = QUESTIONS.filter(q => q.topic === it.topic.id).length;
     return `<article class="plan-card" data-tilt="soft"><span class="rank rank-${Math.min(i + 1, 3)}">${i + 1}</span><div class="subject-icon plan-tile ${it.subject.color}">${subjectIcon(it.subject.id)}</div>
-      <div><div class="plan-title"><h3>${escapeHTML(it.topic.name)}</h3><span class="prio prio-${p.key}">${p.label}</span></div><div class="plan-meta">${escapeHTML(it.subject.name)} · Score: ${it.result.accuracy}% · ${qn} questions</div><p class="plan-tip">${escapeHTML(it.topic.revision)}</p></div>
+      <div><div class="plan-title"><h3>${escapeHTML(it.topic.name)}</h3><span class="prio prio-${p.key}">${p.label}</span></div><div class="plan-meta">${escapeHTML(it.subject.name)} · Score: ${it.result.accuracy}% (${confidenceFor(it.result).label.toLowerCase()}) · ${qn} questions</div><p class="plan-tip">${escapeHTML(it.topic.revision)}</p></div>
       <button class="primary-btn" data-topic-assess="${it.subject.id}" data-topic="${it.topic.id}">Revise Now →</button></article>`;
   }).join("");
   renderRevisionTab(items);
@@ -439,7 +702,7 @@ function renderProgress() {
   chart.innerHTML = state.history.length ? lineChartSVG(state.history) : `<div class="empty-state">Complete an assessment to see your performance over time.</div>`;
   document.getElementById("topicStatusList").innerHTML = allTopicItems().map(i => {
     const s = statusFor(i.result);
-    return `<div class="topic-status-row"><div><strong>${escapeHTML(i.topic.name)}</strong><small>${escapeHTML(i.subject.name)}${i.result ? ` · ${i.result.accuracy}% latest` : ""}</small></div><span class="status-label ${s.className}">${s.label}</span></div>`;
+    return `<div class="topic-status-row"><div><strong>${escapeHTML(i.topic.name)}</strong><small>${escapeHTML(i.subject.name)}${i.result ? ` · ${i.result.accuracy}% estimate · ${confidenceFor(i.result).label.toLowerCase()}` : ""}</small></div><span class="status-label ${s.className}">${s.label}</span></div>`;
   }).join("");
   const hist = document.getElementById("historyTable");
   hist.innerHTML = state.history.length ? state.history.slice(0, 6).map((item, i) => {
@@ -469,8 +732,8 @@ function renderSettings() {
 }
 function resetProgress() {
   if (confirm("Reset all StudySense assessment history and topic results saved on this device?")) {
-    state = { history:[], topicResults:{}, reviewed:state.reviewed || {}, settings:state.settings }; saveState();
-    renderDashboard(); renderSubjects(); renderProgress(); renderRevision(); showToast("Local progress reset.");
+    state = { history:[], topicResults:{}, reviewed:state.reviewed || {}, bookmarks:state.bookmarks || {}, mistakes:{}, reviewLog:[], settings:state.settings }; saveState();
+    renderDashboard(); renderSubjects(); renderProgress(); renderRevision(); renderMistakes(); updateMistakeBadge(); showToast("Local progress reset.");
   }
 }
 
@@ -701,5 +964,5 @@ document.addEventListener("keydown", e => {
   if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey && tag !== "input" && tag !== "textarea" && tag !== "select" && document.getElementById("authOverlay").classList.contains("hidden")) { e.preventDefault(); openSearch(); }
 });
 
-applyTheme(); populateAssessmentOptions(); renderDashboard();
+applyTheme(); populateAssessmentOptions(); renderDashboard(); updateMistakeBadge();
 renderAccountMenu(); if (!hasSession()) showAuth("login");

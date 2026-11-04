@@ -17,6 +17,25 @@ Matches the supplied dashboard mockup: navy sidebar, teal/blue accents, soft 3D 
 - **Videos tab** (Revision Plan) — shows "Not available".
 - **Settings** — display name, account status with log in / log out, light/dark theme, question-quality controls (below), reset progress.
 
+## Backup, resume, bookmarks & semester filter (v6)
+- **Export / import progress** (Settings → Backup): *Export* downloads a JSON file with your history, topic results, mistake notebook, bookmarks, reviewed flags and settings. *Import* replaces the current account's progress with such a file after a confirmation; invalid files are rejected without touching anything. Use it to move between browsers or devices, or as a backup before clearing site data.
+- **Auto-save & resume:** the quiz in progress is saved after every answer or navigation (and when the tab is hidden or closed). Leaving with the ← button keeps it. A *Resume* banner appears on Home and on Take Assessment, restoring the same questions, option order, answers and position. Time spent away doesn't count, so a mock-test timer is effectively paused. Finishing or discarding clears the save. One unfinished quiz is kept per account.
+- **Flag for later / bookmarks:** ☆ Flag for later on any question (and in the detailed analysis). Bookmarked questions are listed in the Mistake Notebook under *Show → Bookmarked* even if you never got them wrong. Reset progress keeps your bookmarks and reviewed flags.
+- **Semester filter:** All / Semester I / Semester II on Home and My Subjects (derived from each subject's description). The stat cards still count every subject.
+- Storage keys added: `studysense-quiz-v1` (unfinished quiz, with `:u:<username>` for accounts).
+
+## Mock tests & weighted diagnosis (v5)
+- **Mock test mode** (Mode dropdown on the setup screen): a timed, mixed-question exam at 1 minute per question (max 90). The timer counts down and turns red in the last minute; when time runs out the test is submitted automatically. A **question navigator** lets you skip and come back, answered questions are highlighted, and the button says *Skip* on unanswered questions. Unanswered questions count as wrong, and you're warned before submitting with blanks. Explanations appear only on the results screen.
+- **Weighted diagnosis:** a topic's score is no longer just the latest attempt. It blends up to your last 5 attempts on that topic, weighting newer and larger attempts more (each older attempt counts 0.6× the next newer one). The Results screen still shows that single attempt's score.
+- **Confidence labels:** based on how many questions the estimate rests on: under 15 = *Low*, 15–29 = *Medium*, 30+ = *High*. Shown on My Subjects, Revision Plan, Progress and the Home recommendation. Short attempts show a note explaining that they're only an estimate.
+- **Bug fix:** choosing a specific topic on the setup screen and pressing *Begin* previously reset to "All topics". It now respects your choice.
+
+## Mistake notebook & spaced repetition (v4)
+- **Mistake Notebook** (sidebar): every question you answer wrongly is saved with its correct answer, explanation and worked steps. Filter by subject, topic, or status (in notebook / due now / mastered). Click a question to reveal the answer.
+- **Spaced repetition:** a missed question is due again after **1 day**, then **3 days**, then **7 days**. Answering it correctly when it's due moves it to the next interval; after the third success it counts as *mastered*. A wrong answer sends it back to the start. A correct answer *before* the due date doesn't advance it.
+- **Due for review:** Home shows a banner with the count, the sidebar shows a badge, and the notebook has a *Review <subject> (n)* button that runs a session of up to 20 due questions from that subject.
+- Review sessions are logged separately (`reviewLog`), so they don't change topic results, history or overall accuracy. Reset progress clears the notebook but keeps your reviewed-question flags.
+
 ## Question quality & quiz modes (v3)
 - **Review workflow:** each question has a `reviewed` flag (set `"reviewed": true` in the bank) and you can also mark questions reviewed inside the app. Turn on **Reviewer mode** in Settings to get *Mark as reviewed* buttons on the question screen and in the detailed analysis. **Only use reviewed questions** restricts assessments to reviewed items. *Copy reviewed question IDs* copies the list so you can write it back into the JSON. Reviewed marks are saved per account.
 - **Option shuffling:** option order is randomised every attempt and the answer key is remapped. Questions whose options depend on position ("Both A and R…", "All of the above") are left in order.
@@ -53,8 +72,9 @@ PY
 ```
 
 ## Data & rules
+- Progress also stores `mistakes` (the spaced-repetition schedule), `reviewLog` and `reviewed` flags alongside history and topic results.
 - Guest progress is saved in `localStorage` under `studysense-progress-v2`; each account uses `studysense-progress-v2:u:<username>`. Accounts are in `studysense-accounts-v1` and the active session in `studysense-session-v1`. The key was bumped with the syllabus-mapped bank because topic IDs changed; progress from the earlier 33-question sample (`v1`) is not carried over.
-- Status bands: Strong ≥ 80%, Moderate 50–79%, Needs review < 50%. "Weak Topics" on Home counts every assessed topic below 80%, matching the Revision Plan.
+- Status bands (applied to the weighted topic estimate): Strong ≥ 80%, Moderate 50–79%, Needs review < 50%. "Weak Topics" on Home counts every assessed topic below 80%, matching the Revision Plan.
 - Charts and donuts are drawn with inline SVG.
 
 ## Limitations
@@ -63,5 +83,5 @@ PY
 - The mockup's "Class Average" line is not drawn because there is no real class data. A labelled Target (80%) line is shown instead.
 - Notifications in the top bar is a placeholder. Videos are marked "Not available".
 - Login is local to this browser: there is no server, so accounts can't sync across devices and a forgotten password can't be recovered (clear site data to start over). Passwords are salted and hashed (PBKDF2 where the browser allows it), never stored in plain text, but this is not a substitute for real server-side authentication.
-- Progress lives only in this browser; there is no cloud sync.
+- Progress lives only in this browser; there is no cloud sync (use Export/Import to move it).
 - Google Fonts load when online; the app falls back to system fonts offline.
