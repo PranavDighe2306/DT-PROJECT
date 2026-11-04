@@ -168,6 +168,8 @@
             <select id="topicSelect"><option value="all">All topics in this subject</option></select>
             <label for="questionCount">Question set</label>
             <select id="questionCount"><option value="10">Quick check · 10 questions</option><option value="20">Focused practice · 20 questions</option><option value="40">Extended practice · up to 40 questions</option><option value="all">Full available set</option></select>
+            <label for="quizMode">Mode</label>
+            <select id="quizMode"><option value="standard">Standard · fixed set of questions</option><option value="adaptive">Adaptive · difficulty adjusts to your answers</option></select>
             <div class="info-box"><span>!</span><p>Answer on your own. Unsure? Make your best guess — the explanations afterwards are where the learning happens.</p></div>
             <button class="primary-btn full-btn" id="beginAssessment">Begin assessment <span>→</span></button>
           </section>
@@ -224,6 +226,11 @@
           <label>Account</label>
           <p class="subheading" id="accountStatus"></p>
           <button class="secondary-btn" id="accountAction">Log in</button>
+          <label>Question quality</label>
+          <p class="subheading" id="reviewSummary"></p>
+          <label class="check-row"><input type="checkbox" id="reviewedOnly"> Only use reviewed questions</label>
+          <label class="check-row"><input type="checkbox" id="reviewerMode"> Reviewer mode (show “Mark as reviewed” buttons)</label>
+          <button class="secondary-btn" id="copyReviewed">Copy reviewed question IDs</button>
           <label>Progress data</label>
           <p class="subheading">Everything is stored only in this browser. Progress is saved separately for each account (and for guest use). Resetting clears assessments and topic results for the current account but keeps your name and theme.</p>
           <button class="danger-btn" id="resetProgress">Reset progress</button>
@@ -254,6 +261,7 @@
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="question_bank.js"></script>
+  <script src="question_bank_extra.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

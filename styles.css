@@ -381,3 +381,20 @@ body::before { content:""; position:fixed; inset:-40px; z-index:-1; pointer-even
 .na-icon { width:64px; height:64px; border-radius:20px; display:grid; place-items:center; background:var(--card2); border:1.5px dashed var(--line); color:var(--muted); }
 .na-icon .ico { width:30px; height:30px; }
 .na-badge { display:inline-block; padding:5px 14px; border-radius:999px; font-weight:800; font-size:13px; background:var(--card2); color:var(--muted); border:1px dashed var(--line); }
+
+/* ---------- question types, review flags, settings checkboxes ---------- */
+.question-text { white-space:pre-line; }
+.q-badges { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+.q-badge { border:0; border-radius:999px; padding:4px 11px; font-size:12px; font-weight:700; background:#e6f0fd; color:#17395a; font-family:inherit; }
+.q-adapt { background:#e2f6f3; color:#0d6f65; }
+.q-ok { background:#e3f6ec; color:#17724a; }
+.q-review { cursor:pointer; background:#fff4dc; color:#8a5a00; box-shadow:0 2px 0 #ecd9a8; }
+.q-review:focus-visible { outline:3px solid var(--blue); outline-offset:2px; }
+.check-row { display:flex; align-items:center; gap:10px; font-weight:500; cursor:pointer; }
+.check-row input { width:18px; height:18px; accent-color:var(--blue); }
+.mini-btn { padding:6px 12px; font-size:13px; margin-top:6px; }
+.steps-list { margin:4px 0 8px; padding-left:22px; }
+[data-theme="dark"] .q-badge { background:#17324a; color:#cfe3f7; }
+[data-theme="dark"] .q-adapt { background:#0f3b38; color:#8fe3d6; }
+[data-theme="dark"] .q-ok { background:#12392a; color:#8fe0b4; }
+[data-theme="dark"] .q-review { background:#3d3015; color:#f3cf7a; box-shadow:none; }

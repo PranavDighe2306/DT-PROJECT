@@ -15,7 +15,13 @@ Matches the supplied dashboard mockup: navy sidebar, teal/blue accents, soft 3D 
 - **Search** — the magnifier in the top bar (or press `/`) searches subjects, topics and question text. Picking a subject, topic or question opens Take Assessment with that subject/topic preselected. Esc closes it.
 - **Login** — a login / sign-up screen appears on first visit, with *Continue as guest*. Click the avatar for the account menu (Settings, Log out / Log in). Each account keeps its own progress, name and theme.
 - **Videos tab** (Revision Plan) — shows "Not available".
-- **Settings** — display name, account status with log in / log out, light/dark theme, reset progress.
+- **Settings** — display name, account status with log in / log out, light/dark theme, question-quality controls (below), reset progress.
+
+## Question quality & quiz modes (v3)
+- **Review workflow:** each question has a `reviewed` flag (set `"reviewed": true` in the bank) and you can also mark questions reviewed inside the app. Turn on **Reviewer mode** in Settings to get *Mark as reviewed* buttons on the question screen and in the detailed analysis. **Only use reviewed questions** restricts assessments to reviewed items. *Copy reviewed question IDs* copies the list so you can write it back into the JSON. Reviewed marks are saved per account.
+- **Option shuffling:** option order is randomised every attempt and the answer key is remapped. Questions whose options depend on position ("Both A and R…", "All of the above") are left in order.
+- **Adaptive mode:** pick *Adaptive* in the setup. It starts at medium; a correct answer moves to a harder question, a wrong one to an easier one, spreading questions across topics. No going back in adaptive mode. (The bank currently has only easy and medium items, so "hard" falls back to medium until hard questions are added.)
+- **New question types**, supported by the app and seeded with 12 sample questions in `question_bank_extra.js`: *multi-select* (`"type":"multi"`, `answer` is an array, all correct options required), *assertion–reason* (`"type":"assertion"`, the four standard options, newline-separated text), and *numericals with worked steps* (`"steps": [...]` is shown in Detailed Analysis).
 
 ## Content
 Mapped to the PCCOE First Year B.Tech Computer Engineering syllabus (Regulations 2026, AY 2026-27): 14 subjects across Semester I and II, 56 topics (one per syllabus unit or theme) and 1,120 MCQs (20 per topic).
@@ -23,13 +29,14 @@ Mapped to the PCCOE First Year B.Tech Computer Engineering syllabus (Regulations
 - **Semester I:** Linear Algebra & Univariate Calculus, Engineering Physics, Computational Thinking & Problem Solving, Digital Electronics & Computer Organization, Constitution of India, Communicative English, Life Skills 1.
 - **Semester II:** Multivariate Calculus, Engineering Chemistry, Object Oriented Programming, Discrete Mathematics, Universal Human Values, Indian Knowledge System, Life Skills 2.
 
-Every question is marked `draft-review-needed` in the bank. Check them against your own notes and the official syllabus before relying on them.
+Every question is marked `draft-review-needed` in the bank (use the review workflow above to track what you've checked). Check them against your own notes and the official syllabus before relying on them.
 
 ## Project structure
 - `index.html` — structure and screens
 - `styles.css` — theme, 3D effects, dark mode, responsive rules
 - `app.js` — assessment logic, diagnosis, rendering and persistence
 - `question_bank.js` — the question bank the app actually loads (generated)
+- `question_bank_extra.js` — hand-written supplementary questions (multi-select, assertion–reason, worked numericals); edit directly
 - `studysense_theory_20_per_unit.json` — source copy of the same bank for editing and review
 
 ### Editing the question bank

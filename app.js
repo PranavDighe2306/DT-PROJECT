@@ -2,7 +2,8 @@
 
 // Subjects, topics and questions come from question_bank.js (generated from studysense_question_bank.json).
 const SUBJECTS = QUESTION_BANK.subjects;
-const QUESTIONS = QUESTION_BANK.questions;
+// question_bank_extra.js (optional) adds multi-select, assertion-reason and worked-numerical items.
+const QUESTIONS = QUESTION_BANK.questions.concat(typeof QUESTION_BANK_EXTRA !== "undefined" ? QUESTION_BANK_EXTRA.questions : []);
 
 const GUEST_KEY = "studysense-progress-v2";       // guest progress (unchanged, so existing progress is kept)
 const ACCOUNTS_KEY = "studysense-accounts-v1";    // local accounts: { username: { salt, hash, displayName } }
@@ -13,18 +14,19 @@ function storageKey() { const u = currentUser(); return u ? `${GUEST_KEY}:u:${u}
 function getAccounts() { try { return JSON.parse(localStorage.getItem(ACCOUNTS_KEY)) || {}; } catch (e) { return {}; } }
 function defaultName() { const u = currentUser(); const acc = u && getAccounts()[u]; return (acc && acc.displayName) || (u ? u : "Pranav"); }
 let state = loadState();
-let currentQuestions = [], currentIndex = 0, answers = {}, lastResult = null;
+let currentQuestions = [], currentIndex = 0, answers = {}, lastResult = null, adaptive = null;
 let toastTimer = null, quizStart = 0, timerHandle = null, revisionTab = "notes";
 
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey()));
     if (saved && Array.isArray(saved.history) && saved.topicResults) {
-      saved.settings = Object.assign({ name: defaultName(), theme: "light" }, saved.settings || {});
+      saved.settings = Object.assign({ name: defaultName(), theme: "light", reviewedOnly: false, reviewerMode: false }, saved.settings || {});
+      saved.reviewed = saved.reviewed || {};
       return saved;
     }
   } catch (error) { console.warn("Could not read saved progress.", error); }
-  return { history: [], topicResults: {}, settings: { name: defaultName(), theme: "light" } };
+  return { history: [], topicResults: {}, reviewed: {}, settings: { name: defaultName(), theme: "light", reviewedOnly: false, reviewerMode: false } };
 }
 function saveState() {
   try { localStorage.setItem(storageKey(), JSON.stringify(state)); }
@@ -195,17 +197,65 @@ function showSetup(visible) {
   document.querySelector(".assessment-preview").classList.toggle("hidden", !visible);
   document.getElementById("assessmentIntro").classList.toggle("hidden", !visible);
 }
+/* ---------- question helpers: review flag, shuffling, answer checking, adaptive picking ---------- */
+const LEVELS = ["easy", "medium", "hard"], LEVEL_LABEL = { easy:"Easy", medium:"Medium", hard:"Hard" };
+const TYPE_BADGE = { multi:"Select all that apply", assertion:"Assertion–Reason", numerical:"Numerical", application:"Application" };
+// Options like "Both A and R…" or "All of the above" depend on their position, so those questions are never shuffled.
+const PINNED_RE = /of the above|\bboth\s+(a|b|c|d|1|2|3|4)\b|\bneither\s+(a|b)\b|\ball\s+(a|b)\b/i;
+function isReviewed(q) { return q.reviewed === true || !!(state.reviewed && state.reviewed[q.id]); }
+function shuffle(arr) { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; }
+function prepareQuestion(q) {
+  const order = q.options.map((_, i) => i);
+  if (!q.options.some(o => PINNED_RE.test(o))) shuffle(order);
+  const copy = Object.assign({}, q);
+  copy.options = order.map(i => q.options[i]);
+  copy.answer = Array.isArray(q.answer) ? q.answer.map(a => order.indexOf(a)).sort((a, b) => a - b) : order.indexOf(q.answer);
+  return copy;
+}
+function isCorrect(q, a) {
+  if (Array.isArray(q.answer)) return Array.isArray(a) && a.length === q.answer.length && q.answer.every(x => a.includes(x));
+  return a === q.answer;
+}
+function hasAnswer(q) { const a = answers[q.id]; return Array.isArray(a) ? a.length > 0 : a !== undefined; }
+function isChosen(q, i) { const a = answers[q.id]; return Array.isArray(a) ? a.includes(i) : a === i; }
+function answerText(q, a) { if (Array.isArray(a)) return a.length ? a.slice().sort().map(i => q.options[i]).join("; ") : "No answer"; return a === undefined ? "No answer" : q.options[a]; }
+function correctText(q) { return Array.isArray(q.answer) ? q.answer.map(i => q.options[i]).join("; ") : q.options[q.answer]; }
+function quizTotal() { return adaptive ? adaptive.total : currentQuestions.length; }
+function pickAdaptive() {
+  const A = adaptive, unused = A.pool.filter(q => !A.used.has(q.id));
+  if (!unused.length) return null;
+  const rank = q => Math.max(0, LEVELS.indexOf(q.difficulty));
+  const gap = Math.min(...unused.map(q => Math.abs(rank(q) - A.level)));
+  let cands = unused.filter(q => Math.abs(rank(q) - A.level) === gap);
+  const seen = t => A.topicCount[t] || 0, least = Math.min(...cands.map(q => seen(q.topic)));
+  cands = cands.filter(q => seen(q.topic) === least);   // spread questions across topics
+  const q = cands[Math.floor(Math.random() * cands.length)];
+  A.used.add(q.id); A.topicCount[q.topic] = seen(q.topic) + 1;
+  return prepareQuestion(q);
+}
+
 function beginAssessment(subjectId, topicId) {
   const subjectSelect = document.getElementById("subjectSelect"), topicSelect = document.getElementById("topicSelect");
   if (subjectId) subjectSelect.value = subjectId;
   updateTopicOptions(); if (topicId) topicSelect.value = topicId;
   const subject = getSubject(subjectSelect.value), selectedTopic = topicSelect.value;
   let pool = QUESTIONS.filter(q => q.subject === subject.id && (selectedTopic === "all" || q.topic === selectedTopic));
+  if (state.settings.reviewedOnly) {
+    pool = pool.filter(isReviewed);
+    if (!pool.length) { showToast("No reviewed questions for that selection. Change this in Settings."); return; }
+  }
   const setting = document.getElementById("questionCount").value;
   const count = setting === "all" ? pool.length : Number(setting);
-  pool = pool.slice().sort(() => Math.random() - 0.5).slice(0, count);
   if (!pool.length) { showToast("No questions are available for that selection yet."); return; }
-  currentQuestions = pool; currentIndex = 0; answers = {}; lastResult = null;
+  if (document.getElementById("quizMode").value === "adaptive") {
+    const maxLevel = Math.max(...pool.map(q => Math.max(0, LEVELS.indexOf(q.difficulty))));
+    adaptive = { pool, level:Math.min(1, maxLevel), maxLevel, used:new Set(), topicCount:{}, total:Math.min(count, pool.length) };
+    currentQuestions = [pickAdaptive()];
+  } else {
+    adaptive = null;
+    currentQuestions = shuffle(pool.slice()).slice(0, count).map(prepareQuestion);
+  }
+  currentIndex = 0; answers = {}; lastResult = null;
   showSetup(false);
   document.getElementById("resultsPanel").classList.add("hidden");
   document.getElementById("quizPanel").classList.remove("hidden");
@@ -219,7 +269,11 @@ function startTimer() {
 function stopTimer() { if (timerHandle) { clearInterval(timerHandle); timerHandle = null; } }
 function renderQuestion() {
   const question = currentQuestions[currentIndex], subject = getSubject(question.subject), topic = getTopic(question.subject, question.topic);
-  const chosen = answers[question.id], total = currentQuestions.length, panel = document.getElementById("quizPanel");
+  const total = quizTotal(), panel = document.getElementById("quizPanel"), multi = Array.isArray(question.answer);
+  const badges = [];
+  if (TYPE_BADGE[question.type]) badges.push(`<span class="q-badge">${TYPE_BADGE[question.type]}</span>`);
+  if (adaptive) badges.push(`<span class="q-badge q-adapt">Adaptive · ${LEVEL_LABEL[LEVELS[adaptive.level]]}</span>`);
+  if (state.settings.reviewerMode) badges.push(question.reviewed === true ? `<span class="q-badge q-ok">✓ Reviewed</span>` : `<button class="q-badge q-review" id="toggleReviewed">${state.reviewed[question.id] ? "✓ Reviewed (undo)" : "Mark as reviewed"}</button>`);
   panel.innerHTML = `
     <div class="quiz-card">
       <div class="quiz-top"><button class="back-btn" id="quizBack" aria-label="Leave assessment">←</button>
@@ -229,18 +283,33 @@ function renderQuestion() {
       <div class="quiz-progress" role="progressbar" aria-valuemin="1" aria-valuemax="${total}" aria-valuenow="${currentIndex + 1}"><span style="width:${((currentIndex + 1) / total) * 100}%"></span></div>
       <div class="question-card" data-tilt="soft">
         <div class="question-art" aria-hidden="true">${quizArt(question.subject)}</div>
-        <div class="question-body"><h2 class="question-text">${escapeHTML(question.text)}</h2>
-          <div class="answer-options">${question.options.map((o, i) => `<button class="answer-option ${chosen === i ? "selected" : ""}" data-answer="${i}"><span class="option-letter">${String.fromCharCode(65 + i)}</span><span class="option-text">${escapeHTML(o)}</span></button>`).join("")}</div>
-          <div class="quiz-controls"><button class="secondary-btn" id="previousQuestion" ${currentIndex === 0 ? "disabled" : ""}>← Previous</button><button class="dark-btn" id="nextQuestion">${currentIndex === total - 1 ? "Finish assessment" : "Next"} →</button></div></div>
+        <div class="question-body">${badges.length ? `<div class="q-badges">${badges.join("")}</div>` : ""}<h2 class="question-text">${escapeHTML(question.text)}</h2>
+          <div class="answer-options" role="group" aria-label="${multi ? "Select all that apply" : "Choose one answer"}">${question.options.map((o, i) => `<button class="answer-option ${isChosen(question, i) ? "selected" : ""}" data-answer="${i}" aria-pressed="${isChosen(question, i)}"><span class="option-letter">${String.fromCharCode(65 + i)}</span><span class="option-text">${escapeHTML(o)}</span></button>`).join("")}</div>
+          <div class="quiz-controls"><button class="secondary-btn ${adaptive ? "hidden" : ""}" id="previousQuestion" ${currentIndex === 0 || adaptive ? "disabled" : ""}>← Previous</button><button class="dark-btn" id="nextQuestion">${currentIndex === total - 1 ? "Finish assessment" : "Next"} →</button></div></div>
       </div>
-      <div class="kbd-hint"><kbd>A</kbd>–<kbd>D</kbd> or <kbd>1</kbd>–<kbd>4</kbd> to answer · <kbd>Enter</kbd> next · <kbd>←</kbd> back</div>
+      <div class="kbd-hint"><kbd>A</kbd>–<kbd>D</kbd> or <kbd>1</kbd>–<kbd>4</kbd> to ${multi ? "toggle" : "answer"} · <kbd>Enter</kbd> next${adaptive ? "" : " · <kbd>←</kbd> back"}</div>
     </div>
     <div class="quiz-deco" aria-hidden="true"><div class="notebook"></div><i class="pencil"></i><div class="sticky sticky-teal sticky-quiz">Think.<br>Apply.<br>Grow.</div></div>`;
-  panel.querySelectorAll("[data-answer]").forEach(b => b.addEventListener("click", () => { answers[question.id] = Number(b.dataset.answer); renderQuestion(); }));
+  panel.querySelectorAll("[data-answer]").forEach(b => b.addEventListener("click", () => {
+    const i = Number(b.dataset.answer);
+    if (multi) { const cur = Array.isArray(answers[question.id]) ? answers[question.id].slice() : []; answers[question.id] = cur.includes(i) ? cur.filter(x => x !== i) : cur.concat(i); }
+    else answers[question.id] = i;
+    renderQuestion();
+  }));
+  const rv = document.getElementById("toggleReviewed");
+  if (rv) rv.addEventListener("click", () => { if (state.reviewed[question.id]) delete state.reviewed[question.id]; else state.reviewed[question.id] = true; saveState(); renderQuestion(); });
   document.getElementById("quizBack").addEventListener("click", () => { if (confirm("Leave this assessment? Your answers so far won't be saved.")) resetAssessment(); });
   document.getElementById("previousQuestion").addEventListener("click", () => { if (currentIndex > 0) { currentIndex--; renderQuestion(); } });
   document.getElementById("nextQuestion").addEventListener("click", () => {
-    if (answers[question.id] === undefined) { showToast("Choose an answer before continuing."); return; }
+    if (!hasAnswer(question)) { showToast(multi ? "Select at least one answer before continuing." : "Choose an answer before continuing."); return; }
+    if (adaptive) {
+      if (currentQuestions.length >= adaptive.total) { finishAssessment(); return; }
+      // right answer -> a harder question next; wrong answer -> an easier one
+      adaptive.level = isCorrect(question, answers[question.id]) ? Math.min(adaptive.maxLevel, adaptive.level + 1) : Math.max(0, adaptive.level - 1);
+      const next = pickAdaptive();
+      if (!next) { finishAssessment(); return; }
+      currentQuestions.push(next); currentIndex++; renderQuestion(); return;
+    }
     if (currentIndex < total - 1) { currentIndex++; renderQuestion(); } else finishAssessment();
   });
 }
@@ -248,18 +317,18 @@ function finishAssessment() {
   stopTimer();
   const durationSec = Math.round((Date.now() - quizStart) / 1000);
   const subject = getSubject(currentQuestions[0].subject);
-  let correct = 0; currentQuestions.forEach(q => { if (answers[q.id] === q.answer) correct++; });
+  let correct = 0; currentQuestions.forEach(q => { if (isCorrect(q, answers[q.id])) correct++; });
   const accuracy = Math.round(correct / currentQuestions.length * 100);
   const topicMap = {};
   currentQuestions.forEach(q => {
     if (!topicMap[q.topic]) topicMap[q.topic] = { total:0, correct:0 };
-    topicMap[q.topic].total++; if (answers[q.id] === q.answer) topicMap[q.topic].correct++;
+    topicMap[q.topic].total++; if (isCorrect(q, answers[q.id])) topicMap[q.topic].correct++;
   });
   const now = Date.now();
   Object.entries(topicMap).forEach(([topicId, d]) => { state.topicResults[topicId] = { accuracy:Math.round(d.correct / d.total * 100), correct:d.correct, total:d.total, updatedAt:now }; });
   const keys = Object.keys(topicMap);
   const scopeName = keys.length === 1 ? getTopic(subject.id, keys[0]).name : "Mixed topics";
-  const result = { id:now, date:new Date().toISOString(), subjectId:subject.id, subjectName:subject.name, scopeName, accuracy, correct, total:currentQuestions.length, durationSec, topicResults:topicMap, questionIds:currentQuestions.map(q => q.id) };
+  const result = { id:now, date:new Date().toISOString(), subjectId:subject.id, subjectName:subject.name, scopeName, accuracy, correct, total:currentQuestions.length, durationSec, topicResults:topicMap, questionIds:currentQuestions.map(q => q.id), mode:adaptive ? "adaptive" : "standard" };
   state.history.unshift(result); saveState(); lastResult = result;
   document.getElementById("quizPanel").classList.add("hidden");
   renderResults(result);
@@ -282,13 +351,15 @@ function renderResults(result) {
     : result.accuracy >= 50 ? [`Good effort, ${name}!`, `You have a solid understanding of the basics. Let's focus on your weak topics${weak && weak.accuracy < 80 ? `, starting with ${escapeHTML(weak.topic.name)}` : ""}.`]
     : [`Good start, ${name}!`, `This is your baseline. Review the explanations, then retest ${weak ? escapeHTML(weak.topic.name) : "the weak topics"}.`];
   const detail = currentQuestions.map((q, i) => {
-    const ok = answers[q.id] === q.answer;
-    return `<div class="feedback-item"><h3>${i + 1}. ${escapeHTML(q.text)}</h3><p class="${ok ? "correct-text" : "incorrect-text"}">${ok ? "✓ Correct" : "✕ Needs review"} · Your answer: ${escapeHTML(q.options[answers[q.id]])}</p><p><strong>Correct answer:</strong> ${escapeHTML(q.options[q.answer])}</p><p><strong>Why:</strong> ${escapeHTML(q.explanation)}</p></div>`;
+    const ok = isCorrect(q, answers[q.id]);
+    const steps = q.steps && q.steps.length ? `<p><strong>Worked steps:</strong></p><ol class="steps-list">${q.steps.map(st => `<li>${escapeHTML(st)}</li>`).join("")}</ol>` : "";
+    const review = state.settings.reviewerMode && q.reviewed !== true ? `<button class="secondary-btn mini-btn" data-review="${escapeHTML(q.id)}">${state.reviewed[q.id] ? "✓ Reviewed (undo)" : "Mark as reviewed"}</button>` : "";
+    return `<div class="feedback-item"><h3>${i + 1}. ${escapeHTML(q.text)}</h3><p class="${ok ? "correct-text" : "incorrect-text"}">${ok ? "✓ Correct" : "✕ Needs review"} · Your answer: ${escapeHTML(answerText(q, answers[q.id]))}</p><p><strong>Correct answer:</strong> ${escapeHTML(correctText(q))}</p><p><strong>Why:</strong> ${escapeHTML(q.explanation)}</p>${steps}${review}</div>`;
   }).join("");
   document.getElementById("resultsPanel").innerHTML = `
     <div class="page-bar"><button class="back-btn" id="resultsBack" aria-label="Back to Take Assessment">←</button><h1>Assessment Results</h1></div>
     <div class="results-top">
-      <div class="result-card score-card" data-tilt="soft"><div><small>Overall Score</small><div class="big-score">${result.accuracy}%</div><small>(${result.correct}/${result.total}) · ${fmtTime(result.durationSec)}</small></div>${donutSVG(result.accuracy, 84, 11)}</div>
+      <div class="result-card score-card" data-tilt="soft"><div><small>Overall Score</small><div class="big-score">${result.accuracy}%</div><small>(${result.correct}/${result.total}) · ${fmtTime(result.durationSec)}${result.mode === "adaptive" ? " · Adaptive" : ""}</small></div>${donutSVG(result.accuracy, 84, 11)}</div>
       <div class="result-card feedback-card" data-tilt="soft"><span class="fb-icon" aria-hidden="true">★</span><div><h3>${fb[0]}</h3><p>${fb[1]}</p></div></div>
       ${SVG_TROPHY}
     </div>
@@ -305,9 +376,15 @@ function renderResults(result) {
   document.getElementById("newAssessment").addEventListener("click", resetAssessment);
   document.getElementById("resultsBack").addEventListener("click", resetAssessment);
   document.getElementById("viewProgress").addEventListener("click", () => navigate("progress"));
+  document.getElementById("detailedAnalysis").addEventListener("click", e => {
+    const b = e.target.closest("[data-review]"); if (!b) return;
+    const id = b.dataset.review;
+    if (state.reviewed[id]) delete state.reviewed[id]; else state.reviewed[id] = true;
+    saveState(); b.textContent = state.reviewed[id] ? "✓ Reviewed (undo)" : "Mark as reviewed";
+  });
 }
 function resetAssessment() {
-  stopTimer(); showSetup(true);
+  stopTimer(); adaptive = null; showSetup(true);
   document.getElementById("quizPanel").classList.add("hidden"); document.getElementById("resultsPanel").classList.add("hidden");
   window.scrollTo({ top:0, behavior:scrollMode() });
 }
@@ -385,10 +462,14 @@ function renderSettings() {
   const u = currentUser();
   setText("accountStatus", u ? `Signed in as @${u}. Your progress is saved to this account on this browser.` : "You're using StudySense as a guest. Log in or sign up to keep progress under your own account.");
   setText("accountAction", u ? "Log out" : "Log in / Sign up");
+  const reviewedCount = QUESTIONS.filter(isReviewed).length;
+  setText("reviewSummary", `${reviewedCount} of ${QUESTIONS.length} questions are marked reviewed. Unreviewed questions are drafts: check them against your notes and the official syllabus.`);
+  document.getElementById("reviewedOnly").checked = !!state.settings.reviewedOnly;
+  document.getElementById("reviewerMode").checked = !!state.settings.reviewerMode;
 }
 function resetProgress() {
   if (confirm("Reset all StudySense assessment history and topic results saved on this device?")) {
-    state = { history:[], topicResults:{}, settings:state.settings }; saveState();
+    state = { history:[], topicResults:{}, reviewed:state.reviewed || {}, settings:state.settings }; saveState();
     renderDashboard(); renderSubjects(); renderProgress(); renderRevision(); showToast("Local progress reset.");
   }
 }
@@ -443,6 +524,16 @@ document.addEventListener("keydown", event => {
   else if (key === "arrowleft") { const p = document.getElementById("previousQuestion"); if (p && !p.disabled) p.click(); }
 });
 document.getElementById("beginAssessment").addEventListener("click", () => beginAssessment());
+document.getElementById("reviewedOnly").addEventListener("change", e => {
+  if (e.target.checked && !QUESTIONS.some(isReviewed)) { e.target.checked = false; showToast("No questions are marked reviewed yet. Turn on Reviewer mode to start marking them."); return; }
+  state.settings.reviewedOnly = e.target.checked; saveState();
+});
+document.getElementById("reviewerMode").addEventListener("change", e => { state.settings.reviewerMode = e.target.checked; saveState(); });
+document.getElementById("copyReviewed").addEventListener("click", () => {
+  const ids = QUESTIONS.filter(isReviewed).map(q => q.id), text = JSON.stringify(ids);
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => showToast(`Copied ${ids.length} reviewed IDs.`), () => window.prompt("Copy these IDs:", text));
+  else window.prompt("Copy these IDs:", text);
+});
 document.getElementById("scrim").addEventListener("click", closeMenu);
 document.getElementById("mobileMenu").addEventListener("click", () => document.getElementById("sidebar").classList.toggle("open"));
 document.getElementById("clearHistory").addEventListener("click", resetProgress);
