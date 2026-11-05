@@ -17,6 +17,28 @@ Matches the supplied dashboard mockup: navy sidebar, teal/blue accents, soft 3D 
 - **Videos tab** (Revision Plan) — shows "Not available".
 - **Settings** — display name, account status with log in / log out, light/dark theme, question-quality controls (below), reset progress.
 
+## Code structure & tests (v10)
+The single 1,270-line `app.js` is now 14 focused files under `js/`, and the checks I had been running ad hoc are a real `tests/` suite you can run with `npm test` (see *Project structure* and *Running the tests* below). Behaviour is unchanged: the split was verified line-for-line against the original.
+
+## Study calendar (v9)
+- **Study Calendar** (sidebar): enter your **exam date**, how many **sessions per day** you can manage (1–3) and which **subjects** the exam covers (shortcuts for Semester I / II). *Build my plan* schedules everything from today to the day before the exam.
+- **How the plan is built:** topics are ranked weakest-first using your weighted topic scores. Below 50% → revise, practise, retest; 50–69% → revise, retest; 70–79% → one practice session; topics you haven't assessed → a diagnostic then a revision session; strong topics (80%+) get a quick recap when there are at least 5 days. Sessions are spread evenly across the days, never exceeding your sessions-per-day limit, and the **last day before the exam is a final review** (clear the Mistake Notebook, skim weak topics) when there are 3+ days. If not everything fits, the lowest-priority sessions are dropped and the page tells you how many.
+- **Using it:** an agenda grouped by week with today highlighted and overdue sessions flagged. Each session has a checkbox and a *Start* button that launches a 10-question quiz on that topic. Finishing a quiz on a topic **ticks off its earliest due/overdue session automatically**. Home shows "Exam in N days" with today's progress.
+- **Rebuilding** (after new results or a changed date) keeps the sessions you've already ticked off. The plan is saved with your progress, included in Export/Import, and cleared by Reset progress. The exam must be at least tomorrow and within a year.
+
+## Streaks, daily goal, badges & weekly summary (v8)
+- **Streak:** consecutive days with at least one question answered (assessments, mock tests and spaced reviews all count). If you haven't practised yet today the streak stays alive until the day ends, and Home tells you how many questions will save it. Best streak is shown too. Days use your device's local time.
+- **Daily goal:** Home shows *Today: n / goal* with a progress bar. Pick 5, 10, 20 or 30 questions from the dropdown (saved per account). A toast celebrates the moment you cross the goal.
+- **Badges** (Progress → Achievements, 11 in total): First Step, Century (100 questions), Sharpshooter (100% on 10+ questions), On a Roll / Week Warrior / Unstoppable (3 / 7 / 30-day streaks), Goal Getter, Mistake Slayer (5 notebook questions mastered), Explorer (5 subjects), Mock Master (80%+ on a mock test) and Strong Foundations (5 Strong topics). New badges are announced in a toast; existing users receive any they've already earned silently.
+- **Weekly summary** (Progress): questions, accuracy, study time and active days for the last 7 days with the change versus the previous 7, a bar per day, and the topics that improved or slipped by 5+ points since their previous attempt.
+- Data: a per-day `activity` log (questions, correct, seconds) and `badges` are stored with your progress, included in Export/Import, and rebuilt from history for older saves. Reset progress clears them.
+
+## PWA, accessibility & mobile navigation (v7)
+- **Installable and offline:** `manifest.webmanifest`, `sw.js` and the `icons/` folder make StudySense an installable app (Chrome/Edge/Android: *Install* from the address bar or Settings → *Install StudySense as an app*; iOS Safari: Share → Add to Home Screen). The service worker caches the app shell, so it opens and works offline, and Google Fonts are cached after first use. **Service workers only run over `https://` or `http://localhost`**, not when you open `index.html` straight from disk (the app still works there, just without offline/install). To try it locally: `python3 -m http.server 8000` in this folder, then open `http://localhost:8000`.
+- **Shipping updates:** edit `CACHE_VERSION` in `sw.js` whenever you change any file, otherwise returning users keep seeing the cached version. A toast tells them when an update has been installed.
+- **Mobile bottom navigation** (screens ≤ 860px): Home, Assess, Notebook (with due-count badge), Progress and *More*, which opens the full menu. The closed drawer is no longer reachable with Tab.
+- **Accessibility:** skip-to-content link; focus moves to the page heading on navigation; in the quiz, keyboard focus stays on the option, flag or button you just used (the screen re-renders after every action) and moves to the question text on Next/Back/jump; the timer has `role="timer"`, the progress bar a label, and the menu buttons `aria-expanded`; the progress chart has a hidden data table for screen readers; high-contrast mode outlines selected items; the online/offline status is announced through the existing live toast.
+
 ## Backup, resume, bookmarks & semester filter (v6)
 - **Export / import progress** (Settings → Backup): *Export* downloads a JSON file with your history, topic results, mistake notebook, bookmarks, reviewed flags and settings. *Import* replaces the current account's progress with such a file after a confirmation; invalid files are rejected without touching anything. Use it to move between browsers or devices, or as a backup before clearing site data.
 - **Auto-save & resume:** the quiz in progress is saved after every answer or navigation (and when the tab is hidden or closed). Leaving with the ← button keeps it. A *Resume* banner appears on Home and on Take Assessment, restoring the same questions, option order, answers and position. Time spent away doesn't count, so a mock-test timer is effectively paused. Finishing or discarding clears the save. One unfinished quiz is kept per account.
@@ -53,10 +75,26 @@ Every question is marked `draft-review-needed` in the bank (use the review workf
 ## Project structure
 - `index.html` — structure and screens
 - `styles.css` — theme, 3D effects, dark mode, responsive rules
-- `app.js` — assessment logic, diagnosis, rendering and persistence
+- `js/` — the app, split into plain scripts that `index.html` loads **in this order** (no build step, no ES modules, so it still runs from `file://`):
+  `core.js` (data, storage, saved state, navigation, date helpers) · `home.js` (icons, Home, My Subjects) · `quiz.js` (setup, quiz, shuffling, adaptive and mock modes) · `results.js` · `notebook.js` (mistakes, spaced repetition) · `session.js` (auto-save and resume) · `backup.js` (export/import) · `motivation.js` (streaks, goal, badges, weekly summary) · `calendar.js` (study plan) · `pages.js` (Revision Plan, Progress, Settings) · `events.js` (effects, global events) · `search.js` · `accounts.js` · `main.js` (start-up, PWA; must stay last)
 - `question_bank.js` — the question bank the app actually loads (generated)
 - `question_bank_extra.js` — hand-written supplementary questions (multi-select, assertion–reason, worked numericals); edit directly
 - `studysense_theory_20_per_unit.json` — source copy of the same bank for editing and review
+- `manifest.webmanifest`, `sw.js`, `icons/` — PWA install and offline support
+- `tests/`, `package.json` — automated tests (see below)
+
+All scripts share one global scope, exactly as the old single `app.js` did. When you add a file, list it in `index.html` (before `main.js`) **and** in `SHELL` in `sw.js`, and bump `CACHE_VERSION`. Code that runs at load time may only use things defined in earlier files; function bodies can call anything because they run after everything has loaded. `tests/load-smoke.test.js` fails if that rule is broken.
+
+## Running the tests
+The app itself needs no install. The tests use [jsdom](https://github.com/jsdom/jsdom) to run the real `index.html` and scripts headlessly:
+
+```
+npm install      # once, installs jsdom
+npm test         # runs every tests/*.test.js and prints a summary
+npm run test:verbose
+node tests/calendar.test.js   # run a single file
+```
+Eight files cover about 190 checks: quiz modes (shuffling, adaptive, review flags), the mistake notebook and spaced-repetition schedule, mock tests and weighted diagnosis, resume / export-import / bookmarks / semester filter, PWA and accessibility behaviour (including service-worker logic), streaks/goals/badges/weekly summary, the study-calendar generator, and a load smoke test. `tests/harness.js` loads the app the way a browser does, taking the script order from `index.html`.
 
 ### Editing the question bank
 The app reads `question_bank.js`, not the JSON or CSV. It is a plain script so the app works when opened straight from disk (a `fetch()` of a local JSON file is blocked by browsers). After editing the JSON, regenerate it:
@@ -84,4 +122,4 @@ PY
 - Notifications in the top bar is a placeholder. Videos are marked "Not available".
 - Login is local to this browser: there is no server, so accounts can't sync across devices and a forgotten password can't be recovered (clear site data to start over). Passwords are salted and hashed (PBKDF2 where the browser allows it), never stored in plain text, but this is not a substitute for real server-side authentication.
 - Progress lives only in this browser; there is no cloud sync (use Export/Import to move it).
-- Google Fonts load when online; the app falls back to system fonts offline.
+- Google Fonts load when online; the app falls back to system fonts offline (they are cached after the first online visit when served over https/localhost).

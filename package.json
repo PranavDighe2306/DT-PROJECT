@@ -1,0 +1,14 @@
+{
+  "name": "studysense",
+  "version": "1.0.0",
+  "private": true,
+  "description": "StudySense: topic-wise diagnostic learning app (plain HTML/CSS/JS). npm is only needed to run the tests.",
+  "scripts": {
+    "test": "node tests/run-all.js",
+    "test:verbose": "node tests/run-all.js --verbose",
+    "serve": "python3 -m http.server 8000"
+  },
+  "devDependencies": {
+    "jsdom": "^26.0.0"
+  }
+}
